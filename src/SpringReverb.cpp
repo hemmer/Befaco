@@ -1,3 +1,5 @@
+#include "vcv_ports/glue/Befaco/Befaco_res_SpringReverbIR_f32.h"
+
 #include "plugin.hpp"
 #include <pffft.h>
 
@@ -7,12 +9,7 @@ static void initIR() {
 	if (!ir.empty())
 		return;
 
-	try {
-		ir = system::readFile(asset::plugin(pluginInstance, "res/SpringReverbIR.f32"));
-	}
-	catch (std::exception& e) {
-		WARN("Cannot load IR: %s", e.what());
-	}
+	ir.assign(std::begin(Befaco_res_SpringReverbIR_f32), std::end(Befaco_res_SpringReverbIR_f32));
 }
 
 static const size_t BLOCK_SIZE = 1024;
