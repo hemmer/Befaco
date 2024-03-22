@@ -1,9 +1,12 @@
 # Change Log
 
+
+## v2.6.0 (in progress)
+  * Midi Thing 2
+    * Initial release
+
 ## v2.5.0
   * Burst
-    * Initial release
-  * Midi Thing 2
     * Initial release
   * Voltio
     * Initial release
