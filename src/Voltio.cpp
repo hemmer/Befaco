@@ -40,7 +40,7 @@ struct Voltio : Module {
 		auto octParam = configParam(OCT_PARAM, 0.f, 10.f, 0.f, "Octave");
 		octParam->snapEnabled = true;
 
-		configSwitch(RANGE_PARAM, 0.f, 1.f, 0.f, "Range", {"-5 to +5", "0 to 10"});
+		configSwitch(RANGE_PARAM, 0.f, 1.f, 0.f, "Range", {"0 to 10", "-5 to +5"});
 		auto semitonesParam = configParam(SEMITONES_PARAM, 0.f, 11.f, 0.f, "Semitones");
 		semitonesParam->snapEnabled = true;
 
