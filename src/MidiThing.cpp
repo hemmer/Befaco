@@ -100,7 +100,7 @@ struct MidiThing : Module {
 		LIGHTS_LEN
 	};
 	/// Port mode
-	enum PORTMODE_t : uint8_t {
+	enum PORTMODE_t {
 		NOPORTMODE = 0,
 		MODE10V,
 		MODEPN5V,
@@ -123,7 +123,8 @@ struct MidiThing : Module {
 
 	const std::vector<float> updateRates = {200., 1000., 4000., 16000.};
 	const std::vector<std::string> updateRateNames = {"200 Hz (fewest active channels, slowest, lowest-cpu)", "1 kHz", "4 kHz",
-		"16 kHz (most active channels, fast, highest-cpu)"};
+	                                                  "16 kHz (most active channels, fast, highest-cpu)"
+	                                                 };
 	int updateRateIdx = 1;
 
 	// use Pre-def 4 for bridge mode
@@ -147,10 +148,11 @@ struct MidiThing : Module {
 
 	}
 
-	void refreshConfig() {
+	void requestAllChannelsParamsOverSysex() {
 		for (int row = 0; row < 4; ++row) {
 			for (int col = 0; col < 3; ++col) {
-				requestParamOverSysex(row, col, 2);
+				const int PORT_CONFIG = 2;
+				requestParamOverSysex(row, col, PORT_CONFIG);
 			}
 		}
 	}
@@ -168,20 +170,41 @@ struct MidiThing : Module {
 		// DEBUG("Predef %d msg request sent: %s", predef, msg.toString().c_str());
 	}
 
-	uint8_t port = 0;
-	void setVoltageMode(uint8_t row, uint8_t col, uint8_t outputMode_) {
-		port = 3 * row + col;
-		// +1 because enum starts at 1
-		portModes[port] = (PORTMODE_t)(outputMode_ + 1);
+	void setMidiMergeViaSysEx(bool mergeOn) {
+		midi::Message msg;
+		msg.bytes.resize(8);
+
+		msg.bytes = {0xF0, 0x7D, 0x19, 0x00, 0x05, 0x02, 0x00, (uint8_t) mergeOn, 0xF7};
+		midiOut.setChannel(0);
+		midiOut.sendMessage(msg);
+		// DEBUG("Predef %d msg request sent: %s", mergeOn, msg.toString().c_str());
+	}
+
+
+	void setVoltageModeOnHardware(uint8_t row, uint8_t col, PORTMODE_t outputMode_) {
+		uint8_t port = 3 * row + col;
+		portModes[port] = outputMode_;
 
 		midi::Message msg;
 		msg.bytes.resize(8);
 		// F0 7D 17 2n 02 02 00 0m F7
 		// Where n = 0 based port number
 		// and m is the volt output mode to select from:
-		msg.bytes = {0xF0, 0x7D, 0x17, static_cast<unsigned char>(32 + port), 0x02, 0x02, 0x00, portModes[port], 0xF7};
+		msg.bytes = {0xF0, 0x7D, 0x17, static_cast<unsigned char>(32 + port), 0x02, 0x02, 0x00, (uint8_t) portModes[port], 0xF7};
 		midiOut.sendMessage(msg);
 		// DEBUG("Voltage mode msg sent: port %d (%d), mode %d", port, static_cast<unsigned char>(32 + port), portModes[port]);
+	}
+
+	void setVoltageModeOnHardware(uint8_t row, uint8_t col) {
+		setVoltageModeOnHardware(row, col, portModes[3 * row + col]);
+	}
+
+	void syncVcvStateToHardware() {
+		for (int row = 0; row < 4; ++row) {
+			for (int col = 0; col < 3; ++col) {
+				setVoltageModeOnHardware(row, col);
+			}
+		}
 	}
 
 
@@ -238,8 +261,26 @@ struct MidiThing : Module {
 		}
 	}
 
+	// one way sync (VCV -> hardware) for now
+	void doSync() {
+		// switch to VCV template (predef 4)
+		setPredef(4);
+
+		// disable MIDI merge (otherwise large sample rates will not work)
+		setMidiMergeViaSysEx(false);
+
+		// send full VCV config
+		syncVcvStateToHardware();
+
+		// disabled for now, but this would request what state the hardware is in
+		if (parseSysExMessagesFromHardware) {
+			requestAllChannelsParamsOverSysex();
+		}
+	}
+
 	// debug only
 	bool setFrame = true;
+	bool parseSysExMessagesFromHardware = false;
 	int numActiveChannels = 0;
 	dsp::BooleanTrigger buttonTrigger;
 	dsp::Timer rateLimiterTimer;
@@ -247,33 +288,27 @@ struct MidiThing : Module {
 	void process(const ProcessArgs& args) override {
 
 		if (buttonTrigger.process(params[REFRESH_PARAM].getValue())) {
-			
-			// currently this sets the predef to 4, which will reset ranges etc
-			// TODO: figure this out!
-			setPredef(4);
-			refreshConfig();
+			doSync();
 		}
 
-		//DEBUG("inputDriver id: %d, outMidi id: %d", inputQueue.getDriverId(), midiOut.getDriverId());
-		//DEBUG("inputDevice id: %d, outMidi id: %d", inputQueue.getDeviceId(), midiOut.getDeviceId());
-		//DEBUG("inputChannel: %d, outChannel: %d", inputQueue.getChannel(), midiOut.getChannel());
+		// disabled for now, but this is how VCV would read SysEx coming from the hardware (if requested above)
+		if (parseSysExMessagesFromHardware) {
+			midi::Message msg;
+			uint8_t outData[32] = {};
+			while (inputQueue.tryPop(&msg, args.frame)) {
+				// DEBUG("msg (size: %d): %s", msg.getSize(), msg.toString().c_str());
 
-		midi::Message msg;
-		uint8_t outData[32] = {};
-		while (inputQueue.tryPop(&msg, args.frame)) {
-			DEBUG("msg (size: %d): %s", msg.getSize(), msg.toString().c_str());
+				uint8_t outLen = decodeSysEx(&msg.bytes[0], outData, msg.bytes.size(), false);
+				if (outLen > 3) {
 
-			uint8_t outLen = decodeSysEx(&msg.bytes[0], outData, msg.bytes.size(), false);
-			if (outLen > 3) {
+					int channel = (outData[2] & 0x0f) >> 0;
 
-				int channel = (outData[2] & 0x0f) >> 0;
-
-				if (channel >= 0 && channel < NUM_INPUTS) {
-					if (outData[outLen - 1] < LASTPORTMODE) {
-						portModes[channel] = (PORTMODE_t) outData[outLen - 1];
-						DEBUG("Channel %d, %d: mode %d (%s)", outData[2], channel, portModes[channel], cfgPortModeNames[portModes[channel]]);
+					if (channel >= 0 && channel < NUM_INPUTS) {
+						if (outData[outLen - 1] < LASTPORTMODE) {
+							portModes[channel] = (PORTMODE_t) outData[outLen - 1];
+							// DEBUG("Channel %d, %d: mode %d (%s)", outData[2], channel, portModes[channel], cfgPortModeNames[portModes[channel]]);
+						}
 					}
-
 				}
 			}
 		}
@@ -333,6 +368,10 @@ struct MidiThing : Module {
 		json_object_set_new(rootJ, "setFrame", json_boolean(setFrame));
 		json_object_set_new(rootJ, "updateRateIdx", json_integer(updateRateIdx));
 
+		for (int c = 0; c < NUM_INPUTS; ++c) {
+			json_object_set_new(rootJ, string::f("portMode%d", c).c_str(), json_integer(portModes[c]));
+		}
+
 		return rootJ;
 	}
 
@@ -357,7 +396,15 @@ struct MidiThing : Module {
 			updateRateIdx = json_integer_value(updateRateIdxJ);
 		}
 
-		refreshConfig();
+		for (int c = 0; c < NUM_INPUTS; ++c) {
+			json_t* portModeJ = json_object_get(rootJ, string::f("portMode%d", c).c_str());
+			if (portModeJ) {
+				portModes[c] = (PORTMODE_t)json_integer_value(portModeJ);
+			}
+		}
+
+		// requestAllChannelsParamsOverSysex();
+		syncVcvStateToHardware();
 	}
 };
 
@@ -375,8 +422,9 @@ struct MidiThingPort : PJ301MPort {
 		[ = ]() {
 			return module->getVoltageMode(row, col);
 		},
-		[ = ](int mode) {
-			module->setVoltageMode(row, col, mode);
+		[ = ](int modeIdx) {
+			MidiThing::PORTMODE_t mode = (MidiThing::PORTMODE_t)(modeIdx + 1);
+			module->setVoltageModeOnHardware(row, col, mode);
 		}
 		                                     ));
 
@@ -486,7 +534,8 @@ struct LEDDisplay : LightWidget {
 					return module->getVoltageMode(row, col) == i;
 				},
 				[ = ]() {
-					module->setVoltageMode(row, col, i);;
+					MidiThing::PORTMODE_t mode = (MidiThing::PORTMODE_t)(i + 1);
+					module->setVoltageModeOnHardware(row, col, mode);
 				}
 				                                  ));
 			}
@@ -743,7 +792,7 @@ struct MidiThingWidget : ModuleWidget {
 							module->inputQueue.setDeviceId(deviceId);
 							module->inputQueue.setChannel(0); // TODO update
 
-							module->refreshConfig();
+							module->doSync();
 
 							// DEBUG("Updating Output MIDI settings - driver: %s, device: %s",
 							//        driver->getName().c_str(), driver->getOutputDeviceName(deviceId).c_str());
@@ -761,7 +810,6 @@ struct MidiThingWidget : ModuleWidget {
 		},
 		[ = ](int mode) {
 			module->setPredef(mode + 1);
-			module->refreshConfig();
 		}));
 
 
