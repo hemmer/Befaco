@@ -4,6 +4,9 @@
 ## v2.6.0 (in progress)
   * Midi Thing 2
     * Initial release
+  * Octaves 
+    * Initial release
+
 
 ## v2.5.0
   * Burst
