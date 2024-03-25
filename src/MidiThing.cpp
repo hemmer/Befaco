@@ -121,11 +121,11 @@ struct MidiThing : Module {
 		""
 	};
 
-	const std::vector<float> updateRates = {200., 1000., 4000., 16000.};
-	const std::vector<std::string> updateRateNames = {"200 Hz (fewest active channels, slowest, lowest-cpu)", "1 kHz", "4 kHz",
-	                                                  "16 kHz (most active channels, fast, highest-cpu)"
+	const std::vector<float> updateRates = {250., 500., 1000., 2000., 4000., 8000.};
+	const std::vector<std::string> updateRateNames = {"250 Hz (fewest active channels, slowest, lowest-cpu)", "500 Hz", "1 kHz", "2 kHz", "4 kHz",
+	                                                  "8 kHz (most active channels, fast, highest-cpu)"
 	                                                 };
-	int updateRateIdx = 1;
+	int updateRateIdx = 2;
 
 	// use Pre-def 4 for bridge mode
 	const static int VCV_BRIDGE_PREDEF = 4;
@@ -279,7 +279,6 @@ struct MidiThing : Module {
 	}
 
 	// debug only
-	bool setFrame = true;
 	bool parseSysExMessagesFromHardware = false;
 	int numActiveChannels = 0;
 	dsp::BooleanTrigger buttonTrigger;
@@ -349,10 +348,7 @@ struct MidiThing : Module {
 			m.setStatus(0xe);
 			m.setNote(pw & 0x7f);
 			m.setValue((pw >> 7) & 0x7f);
-
-			if (setFrame) {
-				m.setFrame(args.frame);
-			}
+			m.setFrame(args.frame);
 
 			midiOut.setChannel(c);
 			midiOut.sendMessage(m);
@@ -364,8 +360,6 @@ struct MidiThing : Module {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "midiOutput", midiOut.toJson());
 		json_object_set_new(rootJ, "inputQueue", inputQueue.toJson());
-
-		json_object_set_new(rootJ, "setFrame", json_boolean(setFrame));
 		json_object_set_new(rootJ, "updateRateIdx", json_integer(updateRateIdx));
 
 		for (int c = 0; c < NUM_INPUTS; ++c) {
@@ -384,11 +378,6 @@ struct MidiThing : Module {
 		json_t* midiInputQueueJ = json_object_get(rootJ, "inputQueue");
 		if (midiInputQueueJ) {
 			inputQueue.fromJson(midiInputQueueJ);
-		}
-
-		json_t* setFrameJ = json_object_get(rootJ, "setFrame");
-		if (setFrameJ) {
-			setFrame = json_boolean_value(setFrameJ);
 		}
 
 		json_t* updateRateIdxJ = json_object_get(rootJ, "updateRateIdx");
@@ -428,6 +417,7 @@ struct MidiThingPort : PJ301MPort {
 		}
 		                                     ));
 
+		/*
 		menu->addChild(createIndexSubmenuItem("Get Port Info",
 		{"Full", "Port", "MIDI", "Voice"},
 		[ = ]() {
@@ -437,6 +427,7 @@ struct MidiThingPort : PJ301MPort {
 			module->requestParamOverSysex(row, col, 2 * mode);
 		}
 		                                     ));
+		*/
 	}
 };
 
@@ -769,7 +760,7 @@ struct MidiThingWidget : ModuleWidget {
 
 		menu->addChild(new MenuSeparator());
 
-		menu->addChild(createSubmenuItem("Select Device", "",
+		menu->addChild(createSubmenuItem("Select MIDI Device", "",
 		[ = ](Menu * menu) {
 
 			for (auto driverId : rack::midi::getDriverIds()) {
@@ -802,25 +793,12 @@ struct MidiThingWidget : ModuleWidget {
 			}
 		}));
 
-
-		menu->addChild(createIndexSubmenuItem("Select Hardware Preset",
-		{"Predef 1", "Predef 2", "Predef 3", "Predef 4 (VCV Mode)"},
-		[ = ]() {
-			return -1;
-		},
-		[ = ](int mode) {
-			module->setPredef(mode + 1);
-		}));
-
-
-		menu->addChild(createIndexPtrSubmenuItem("MIDI Rate Limiting",
+		menu->addChild(createIndexPtrSubmenuItem("All channels MIDI update rate",
 		               module->updateRateNames,
 		               &module->updateRateIdx));
 
-		menu->addChild(createBoolPtrMenuItem("Set frame", "", &module->setFrame));
-
 		float updateRate = module->updateRates[module->updateRateIdx] / module->numActiveChannels;
-		menu->addChild(createMenuLabel(string::f("Per-channel MIDI rate: %.3g Hz", updateRate)));
+		menu->addChild(createMenuLabel(string::f("Per-channel MIDI update rate: %.3g Hz", updateRate)));
 	}
 };
 
