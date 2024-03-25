@@ -1,5 +1,5 @@
 #include "plugin.hpp"
-
+#include "ChowDSP.hpp"
 
 float aliasSuppressedSaw(const float* phases, float pw) {
 	float sawBuffer[3];
@@ -90,14 +90,6 @@ struct Octaves : Module {
 		OUT_08F_OUTPUT,
 		OUT_16F_OUTPUT,
 		OUT_32F_OUTPUT,
-		OUT_OUTPUT,
-		OUT2_OUTPUT,
-		OUT_01F_OUTPUT_ALT,
-		OUT_02F_OUTPUT_ALT,
-		OUT_04F_OUTPUT_ALT,
-		OUT_08F_OUTPUT_ALT,
-		OUT_16F_OUTPUT_ALT,
-		OUT_32F_OUTPUT_ALT,
 		OUTPUTS_LEN
 	};
 	enum LightId {
@@ -106,9 +98,15 @@ struct Octaves : Module {
 
 	bool limitPW = true;
 	bool removePulseDC = false;
-	bool adaa = false;
-	int oversamplingIndex = 0;
 	static const int NUM_OUTPUTS = 6;
+	const float ranges[3] = {4.f, 1.f, 1.f / 12.f}; 	// full, octave, semitone
+
+	float phase = 0.f;		// phase for core waveform, in [0, 1]
+	chowdsp::VariableOversampling<6, float> oversampler[NUM_OUTPUTS]; 	// uses a 2*6=12th order Butterworth filter
+	int oversamplingIndex = 1; 	// default is 2^oversamplingIndex == x2 oversampling
+
+	DCBlocker blockDCFilter;			// optionally block DC with RC filter @ ~22 Hz
+	dsp::SchmittTrigger syncTrigger; 	// for hard sync
 
 	Octaves() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -146,124 +144,110 @@ struct Octaves : Module {
 		configOutput(OUT_08F_OUTPUT, "x8F");
 		configOutput(OUT_16F_OUTPUT, "x16F");
 		configOutput(OUT_32F_OUTPUT, "x32F");
-		configOutput(OUT_OUTPUT, "debug");
+
+		// calculate up/downsampling rates
+		onSampleRateChange();
 	}
 
-	float phase = 0.f;
-	float phases[3];
-	bool forceNaive = false;
-
-	HardClipperADAA<float> hardClipper[NUM_OUTPUTS];
+	void onSampleRateChange() override {
+		float sampleRate = APP->engine->getSampleRate();
+		for (int c = 0; c < NUM_OUTPUTS; c++) {
+			oversampler[c].setOversamplingIndex(oversamplingIndex);
+			oversampler[c].reset(sampleRate);
+		}
+		blockDCFilter.setFrequency(22.05 / sampleRate);
+	}
+	
 
 	void process(const ProcessArgs& args) override {
+		const int rangeIndex = params[RANGE_PARAM].getValue();
 
-		float pitch = params[TUNE_PARAM].getValue() + inputs[VOCT1_INPUT].getVoltage() + inputs[VOCT2_INPUT].getVoltage();
+		float pitch = ranges[rangeIndex] * params[TUNE_PARAM].getValue() + inputs[VOCT1_INPUT].getVoltage() + inputs[VOCT2_INPUT].getVoltage();
 		pitch += params[OCTAVE_PARAM].getValue() - 3;
 		float freq = dsp::FREQ_C4 * dsp::exp2_taylor5(pitch);
 		// -1 to +1
-		float pwmCV = params[PWM_CV_PARAM].getValue() * clamp(inputs[PWM_INPUT].getVoltage() / 10.f, -1.f, 1.f);
+		const float pwmCV = params[PWM_CV_PARAM].getValue() * clamp(inputs[PWM_INPUT].getVoltage() / 10.f, -1.f, 1.f);
 		const float pulseWidthLimit = limitPW ? 0.05f : 0.0f;
 
 		// pwm in [-0.25 : +0.25]
-		float pwm = clamp(0.5 - params[PWM_PARAM].getValue() + 0.5 * pwmCV, -0.5f + pulseWidthLimit, 0.5f - pulseWidthLimit);
-		pwm /= 2.0;
+		const float pwm = 2 * clamp(0.5 - params[PWM_PARAM].getValue() + 0.5 * pwmCV, -0.5f + pulseWidthLimit, 0.5f - pulseWidthLimit);
 
+		const int oversamplingRatio = oversampler[0].getOversamplingRatio();
 
-		float deltaPhase = freq * args.sampleTime;
-		phase += deltaPhase;
-		phase -= std::floor(phase);
+		// work out active outputs
+		std::vector<int> connectedOutputs = getConnectedOutputs();
+		if (connectedOutputs.size() == 0) {
+			return;
+		}
+		// only process up to highest active channel
+		const int highestOutput = *std::max_element(connectedOutputs.begin(), connectedOutputs.end());
+		const float deltaPhase = freq * args.sampleTime / oversamplingRatio;
 
-		float sum = 0.f;
-		float sumNaive = 0.f;
-		for (int c = 0; c < NUM_OUTPUTS; c++) {
-			// derive phases for higher octaves from base phase (this keeps things in sync!)
-			const float n = (float)(1 << c);
-			// this is on [0, 1]
-			const float effectivePhaseRaw = n * std::fmod(phase, 1 / n);
-			// this is on [0, 1], and offset in time by 0.25
-			const float effectivePhase = std::fmod(effectivePhaseRaw + 0.25, 1);
-
-			const float effectiveDeltaPhase = deltaPhase * n;
-			const float gainCV = clamp(inputs[GAIN_01F_INPUT + c].getNormalVoltage(10.f) / 10.f, 0.f, 1.0f);
-			const float gain = params[GAIN_01F_PARAM + c].getValue() * gainCV;
-
-			// floating point arithmetic doesn't work well at low frequencies, specifically because the finite difference denominator
-			// becomes tiny - we check for that scenario and use naive / 1st order waveforms in that frequency regime (as aliasing isn't
-			// a problem there). With no oversampling, at 44100Hz, the threshold frequency is 44.1Hz.
-			const bool lowFreqRegime = forceNaive; //effectiveDeltaPhase < 1e-3 || forceNaive;
-
-
-			//float waveTri = 1.0 - 2.0 * std::abs(2.f * effectivePhase - 1.0);
-			// float dpwOrder1 = (waveTri > 2 * pwm - 1) ? 1.0 : -1.0;
-
-			float dpwOrder1 = gain * (effectivePhaseRaw > pwm + 0.25 && effectivePhaseRaw < 0.75 - pwm ? -1.0 : +1.0);
-			dpwOrder1 -= removePulseDC ? 2.f * (0.5f - pwm) : 0.f;
-
-			// dpwOrder1 = waveTri * gain;
-
-			sumNaive += dpwOrder1;
-
-			outputs[OUT_01F_OUTPUT_ALT + c].setVoltage(dpwOrder1);
-
-			float outForOctave = dpwOrder1;
-
-			if (!lowFreqRegime) {
-				phases[0] = effectivePhase - 2 * effectiveDeltaPhase + (effectivePhase < 2 * effectiveDeltaPhase ? 1.f : 0.f);
-				phases[1] = effectivePhase - 1 * effectiveDeltaPhase + (effectivePhase < 1 * effectiveDeltaPhase ? 1.f : 0.f);
-				phases[2] = effectivePhase;
-
-
-				float saw = aliasSuppressedSaw(phases, pwm);
-				float sawOffset = aliasSuppressedOffsetSaw(phases, pwm);
-				float denominatorInv = 0.25 / (effectiveDeltaPhase * effectiveDeltaPhase);
-				float dpwOrder3 = gain * (sawOffset - saw) * denominatorInv;
-
-				const float pulseDCOffset = (!removePulseDC) * 4.f * pwm * gain;
-				dpwOrder3 += pulseDCOffset;
-
-
-				outForOctave = dpwOrder3;
-			}
-
-
-			sum += outForOctave;
-			if (adaa) {
-				sum = hardClipper[c].process(sum);
-			}
-			else {
-				sum = clamp(sum, -1.f, 1.f);
-			}
-
-			if (outputs[OUT_01F_OUTPUT + c].isConnected()) {
-				outputs[OUT_01F_OUTPUT + c].setVoltage(5 * sum);
-				sum = 0.f;
-			}
-
-			if (false) {
-				float x = 3 * std::sin(2 * M_PI * effectivePhase);
-				outputs[OUT_OUTPUT].setVoltage(clamp(x, -1.f, 1.f));
-
-				//float y = hardClipper.process(x);
-				//outputs[OUT2_OUTPUT].setVoltage(y);
-			}
-
-
+		//  process sync
+		if (syncTrigger.process(inputs[SYNC_INPUT].getVoltage())) {
+			phase = 0.5f;
 		}
 
-		//outputs[OUT_OUTPUT].setVoltage(sum);
-		//outputs[OUT2_OUTPUT].setVoltage(phase > 0.5 ? +5 : -5);
+		for (int i = 0; i < oversamplingRatio; i++) {
+
+			phase += deltaPhase;
+			phase -= std::floor(phase);
+
+			float sum = 0.f;
+			for (int c = 0; c <= highestOutput; c++) {
+				// derive phases for higher octaves from base phase (this keeps things in sync!)
+				const float n = (float)(1 << c);
+				// this is on [0, 1]
+				const float effectivePhase = n * std::fmod(phase, 1 / n);
+				const float gainCV = clamp(inputs[GAIN_01F_INPUT + c].getNormalVoltage(10.f) / 10.f, 0.f, 1.0f);
+				const float gain = params[GAIN_01F_PARAM + c].getValue() * gainCV;
+
+				const float waveTri = 1.0 - 2.0 * std::abs(2.f * effectivePhase - 1.0);
+				// build square from triangle + comparator
+				const float waveSquare = (waveTri > pwm) ? +1 : -1;
+
+				sum += waveSquare * gain;
+				sum = clamp(sum, -1.f, 1.f);
+
+				if (outputs[OUT_01F_OUTPUT + c].isConnected()) {
+					oversampler[c].getOSBuffer()[i] = sum;
+					sum = 0.f;
+				}
+			}
+
+		} // end of oversampling loop
+
+		// only downsample required channels
+		for (int c = 0; c <= highestOutput; c++) {
+			if (outputs[OUT_01F_OUTPUT + c].isConnected()) {
+				// downsample (if required)
+				float out = (oversamplingRatio > 1) ? oversampler[c].downsample() : oversampler[c].getOSBuffer()[0];
+
+				if (removePulseDC) {
+					out = blockDCFilter.process(out);
+				}
+
+				outputs[OUT_01F_OUTPUT + c].setVoltage(5.f * out);
+			}
+		}
 
 	}
 
+	std::vector<int> getConnectedOutputs() {
+		std::vector<int> connectedOutputs;
+		for (int c = 0; c < NUM_OUTPUTS; c++) {
+			if (outputs[OUT_01F_OUTPUT + c].isConnected()) {
+				connectedOutputs.push_back(c);
+			}
+		}
+		return connectedOutputs;
+	}
 
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "removePulseDC", json_boolean(removePulseDC));
 		json_object_set_new(rootJ, "limitPW", json_boolean(limitPW));
-		json_object_set_new(rootJ, "forceNaive", json_boolean(forceNaive));
-		json_object_set_new(rootJ, "adaa", json_boolean(adaa));
-		// TODO:
-		// json_object_set_new(rootJ, "oversamplingIndex", json_integer(oversampler[0].getOversamplingIndex()));
+		json_object_set_new(rootJ, "oversamplingIndex", json_integer(oversampler[0].getOversamplingIndex()));
 		return rootJ;
 	}
 
@@ -279,26 +263,13 @@ struct Octaves : Module {
 			limitPW = json_boolean_value(limitPWJ);
 		}
 
-		json_t* forceNaiveJ = json_object_get(rootJ, "forceNaive");
-		if (forceNaiveJ) {
-			forceNaive = json_boolean_value(forceNaiveJ);
-		}
-
 		json_t* oversamplingIndexJ = json_object_get(rootJ, "oversamplingIndex");
 		if (oversamplingIndexJ) {
 			oversamplingIndex = json_integer_value(oversamplingIndexJ);
 			onSampleRateChange();
 		}
-
-		json_t* adaaJ = json_object_get(rootJ, "adaa");
-		if (adaaJ) {
-			adaa = json_boolean_value(adaaJ);
-		}
 	}
 };
-
-
-
 
 struct OctavesWidget : ModuleWidget {
 	OctavesWidget(Octaves* module) {
@@ -340,16 +311,6 @@ struct OctavesWidget : ModuleWidget {
 		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(45.384, 113.508)), module, Octaves::OUT_16F_OUTPUT));
 		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(55.418, 113.508)), module, Octaves::OUT_32F_OUTPUT));
 
-		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(25.316, 106.508)), module, Octaves::OUT_OUTPUT));
-		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(35.316, 106.508)), module, Octaves::OUT2_OUTPUT));
-
-		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(5.247,  120.508)), module, Octaves::OUT_01F_OUTPUT_ALT));
-		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(15.282, 120.508)), module, Octaves::OUT_02F_OUTPUT_ALT));
-		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(25.316, 120.508)), module, Octaves::OUT_04F_OUTPUT_ALT));
-		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(35.35,  120.508)), module, Octaves::OUT_08F_OUTPUT_ALT));
-		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(45.384, 120.508)), module, Octaves::OUT_16F_OUTPUT_ALT));
-		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(55.418, 120.508)), module, Octaves::OUT_32F_OUTPUT_ALT));
-
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -375,13 +336,7 @@ struct OctavesWidget : ModuleWidget {
 		}
 		                                     ));
 
-		menu->addChild(createBoolPtrMenuItem("Force naive waveforms", "", &module->forceNaive));
-
-		menu->addChild(createBoolPtrMenuItem("ADAADAA", "", &module->adaa));
-
-
 	}
 };
-
 
 Model* modelOctaves = createModel<Octaves, OctavesWidget>("Octaves");
