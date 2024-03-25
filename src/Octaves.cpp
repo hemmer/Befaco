@@ -18,13 +18,42 @@ float aliasSuppressedOffsetSaw(const float* phases, float pw) {
 
 	for (int i = 0; i < 3; ++i) {
 		float pwp = 2 * phases[i] - 2 * pw; 		// range -1 to +1
-		
+
 		pwp += simd::ifelse(pwp > 1, -2, 0);     			// modulo on [-1, +1]
 		sawOffsetBuff[i] = (pwp * pwp * pwp - pwp) / 6.0;	// eq 11
 	}
 	return (sawOffsetBuff[0] - 2.0 * sawOffsetBuff[1] + sawOffsetBuff[2]);
 }
 
+template<typename T>
+class HardClipperADAA {
+public:
+
+	T process(T x) {
+		T y = simd::ifelse(simd::abs(x - xPrev) < 1e-5,
+		                   f(0.5 * (xPrev + x)),
+		                   (F(x) - F(xPrev)) / (x - xPrev));
+
+		xPrev = x;
+		return y;
+	}
+
+
+	static T f(T x) {
+		return simd::ifelse(simd::abs(x) < 1, x, simd::sgn(x));
+	}
+
+	static T F(T x) {
+		return simd::ifelse(simd::abs(x) < 1, 0.5 * x * x, x * simd::sgn(x) - 0.5);
+	}
+
+	void reset() {
+		xPrev = 0.f;
+	}
+
+private:
+	T xPrev = 0.f;
+};
 
 struct Octaves : Module {
 	enum ParamId {
@@ -77,7 +106,9 @@ struct Octaves : Module {
 
 	bool limitPW = true;
 	bool removePulseDC = false;
+	bool adaa = false;
 	int oversamplingIndex = 0;
+	static const int NUM_OUTPUTS = 6;
 
 	Octaves() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -122,6 +153,8 @@ struct Octaves : Module {
 	float phases[3];
 	bool forceNaive = false;
 
+	HardClipperADAA<float> hardClipper[NUM_OUTPUTS];
+
 	void process(const ProcessArgs& args) override {
 
 		float pitch = params[TUNE_PARAM].getValue() + inputs[VOCT1_INPUT].getVoltage() + inputs[VOCT2_INPUT].getVoltage();
@@ -130,7 +163,7 @@ struct Octaves : Module {
 		// -1 to +1
 		float pwmCV = params[PWM_CV_PARAM].getValue() * clamp(inputs[PWM_INPUT].getVoltage() / 10.f, -1.f, 1.f);
 		const float pulseWidthLimit = limitPW ? 0.05f : 0.0f;
-		
+
 		// pwm in [-0.25 : +0.25]
 		float pwm = clamp(0.5 - params[PWM_PARAM].getValue() + 0.5 * pwmCV, -0.5f + pulseWidthLimit, 0.5f - pulseWidthLimit);
 		pwm /= 2.0;
@@ -142,11 +175,11 @@ struct Octaves : Module {
 
 		float sum = 0.f;
 		float sumNaive = 0.f;
-		for (int c = 0; c < 6; c++) {
+		for (int c = 0; c < NUM_OUTPUTS; c++) {
 			// derive phases for higher octaves from base phase (this keeps things in sync!)
 			const float n = (float)(1 << c);
 			// this is on [0, 1]
-			const float effectivePhaseRaw = n * std::fmod(phase, 1 / n);			
+			const float effectivePhaseRaw = n * std::fmod(phase, 1 / n);
 			// this is on [0, 1], and offset in time by 0.25
 			const float effectivePhase = std::fmod(effectivePhaseRaw + 0.25, 1);
 
@@ -194,22 +227,24 @@ struct Octaves : Module {
 
 
 			sum += outForOctave;
-			sum = clamp(sum, -1.f, 1.f);
+			if (adaa) {
+				sum = hardClipper[c].process(sum);
+			}
+			else {
+				sum = clamp(sum, -1.f, 1.f);
+			}
 
 			if (outputs[OUT_01F_OUTPUT + c].isConnected()) {
 				outputs[OUT_01F_OUTPUT + c].setVoltage(5 * sum);
 				sum = 0.f;
 			}
 
-			if (c == 0) {
-				outputs[OUT_OUTPUT].setVoltage(effectivePhase);
-				
-				float saw = aliasSuppressedSaw(phases, 2*pwm);
-				float sawOffset = aliasSuppressedOffsetSaw(phases, 2*pwm);
-				float denominatorInv = 0.25 / (effectiveDeltaPhase * effectiveDeltaPhase);
-				float dpwOrder3_ = gain * (-saw) * denominatorInv;
+			if (false) {
+				float x = 3 * std::sin(2 * M_PI * effectivePhase);
+				outputs[OUT_OUTPUT].setVoltage(clamp(x, -1.f, 1.f));
 
-				outputs[OUT2_OUTPUT].setVoltage(dpwOrder3_);
+				//float y = hardClipper.process(x);
+				//outputs[OUT2_OUTPUT].setVoltage(y);
 			}
 
 
@@ -226,6 +261,7 @@ struct Octaves : Module {
 		json_object_set_new(rootJ, "removePulseDC", json_boolean(removePulseDC));
 		json_object_set_new(rootJ, "limitPW", json_boolean(limitPW));
 		json_object_set_new(rootJ, "forceNaive", json_boolean(forceNaive));
+		json_object_set_new(rootJ, "adaa", json_boolean(adaa));
 		// TODO:
 		// json_object_set_new(rootJ, "oversamplingIndex", json_integer(oversampler[0].getOversamplingIndex()));
 		return rootJ;
@@ -252,6 +288,11 @@ struct Octaves : Module {
 		if (oversamplingIndexJ) {
 			oversamplingIndex = json_integer_value(oversamplingIndexJ);
 			onSampleRateChange();
+		}
+
+		json_t* adaaJ = json_object_get(rootJ, "adaa");
+		if (adaaJ) {
+			adaa = json_boolean_value(adaaJ);
 		}
 	}
 };
@@ -335,6 +376,8 @@ struct OctavesWidget : ModuleWidget {
 		                                     ));
 
 		menu->addChild(createBoolPtrMenuItem("Force naive waveforms", "", &module->forceNaive));
+
+		menu->addChild(createBoolPtrMenuItem("ADAADAA", "", &module->adaa));
 
 
 	}
