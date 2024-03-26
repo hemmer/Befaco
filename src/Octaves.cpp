@@ -1,6 +1,8 @@
 #include "plugin.hpp"
 #include "ChowDSP.hpp"
 
+using namespace simd;
+
 float aliasSuppressedSaw(const float* phases, float pw) {
 	float sawBuffer[3];
 	for (int i = 0; i < 3; ++i) {
@@ -102,29 +104,29 @@ struct Octaves : Module {
 	static const int NUM_OUTPUTS = 6;
 	const float ranges[3] = {4.f, 1.f, 1.f / 12.f}; 	// full, octave, semitone
 
-	float phase = 0.f;		// phase for core waveform, in [0, 1]
-	chowdsp::VariableOversampling<6, float> oversampler[NUM_OUTPUTS]; 	// uses a 2*6=12th order Butterworth filter
+	float_4 phase[4] = {};		// phase for core waveform, in [0, 1]
+	chowdsp::VariableOversampling<6, float_4> oversampler[NUM_OUTPUTS][4]; 	// uses a 2*6=12th order Butterworth filter
 	int oversamplingIndex = 1; 	// default is 2^oversamplingIndex == x2 oversampling
 
-	DCBlocker blockDCFilter[NUM_OUTPUTS];			// optionally block DC with RC filter @ ~22 Hz
-	dsp::SchmittTrigger syncTrigger; 	// for hard sync
+	DCBlockerT<2, float_4> blockDCFilter[NUM_OUTPUTS][4];			// optionally block DC with RC filter @ ~22 Hz
+	dsp::TSchmittTrigger<float_4> syncTrigger[4]; 	// for hard sync
 
 	Octaves() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(PWM_CV_PARAM, 0.f, 1.f, 1.f, "PWM CV attenuater");
 
-		auto octParam = configSwitch(OCTAVE_PARAM, 0.f, 6.f, 4.f, "Octave", {"C1", "C2", "C3", "C4", "C5", "C6", "C7"});
+		auto octParam = configSwitch(OCTAVE_PARAM, 0.f, 6.f, 1.f, "Octave", {"C1", "C2", "C3", "C4", "C5", "C6", "C7"});
 		octParam->snapEnabled = true;
 
 		configParam(TUNE_PARAM, -1.f, 1.f, 0.f, "Tune");
 		configParam(PWM_PARAM, 0.5f, 0.f, 0.5f, "PWM");
-		auto rangeParam = configSwitch(RANGE_PARAM, 0.f, 2.f, 0.f, "Range", {"VCO: Full", "VCO: Octave", "VCO: Semitone"});
+		auto rangeParam = configSwitch(RANGE_PARAM, 0.f, 2.f, 1.f, "Range", {"VCO: Full", "VCO: Octave", "VCO: Semitone"});
 		rangeParam->snapEnabled = true;
 
-		configParam(GAIN_01F_PARAM, 0.f, 1.f, 0.f, "Gain Fundamental");
-		configParam(GAIN_02F_PARAM, 0.f, 1.f, 0.f, "Gain x2 Fundamental");
-		configParam(GAIN_04F_PARAM, 0.f, 1.f, 0.f, "Gain x4 Fundamental");
-		configParam(GAIN_08F_PARAM, 0.f, 1.f, 0.f, "Gain x8 Fundamental");
+		configParam(GAIN_01F_PARAM, 0.f, 1.f, 1.00f, "Gain Fundamental");
+		configParam(GAIN_02F_PARAM, 0.f, 1.f, 0.75f, "Gain x2 Fundamental");
+		configParam(GAIN_04F_PARAM, 0.f, 1.f, 0.50f, "Gain x4 Fundamental");
+		configParam(GAIN_08F_PARAM, 0.f, 1.f, 0.25f, "Gain x8 Fundamental");
 		configParam(GAIN_16F_PARAM, 0.f, 1.f, 0.f, "Gain x16 Fundamental");
 		configParam(GAIN_32F_PARAM, 0.f, 1.f, 0.f, "Gain x32 Fundamental");
 
@@ -153,85 +155,115 @@ struct Octaves : Module {
 	void onSampleRateChange() override {
 		float sampleRate = APP->engine->getSampleRate();
 		for (int c = 0; c < NUM_OUTPUTS; c++) {
-			oversampler[c].setOversamplingIndex(oversamplingIndex);
-			oversampler[c].reset(sampleRate);
-			blockDCFilter[c].setFrequency(22.05 / sampleRate);
+			for (int i = 0; i < 4; i++) {
+				oversampler[c][i].setOversamplingIndex(oversamplingIndex);
+				oversampler[c][i].reset(sampleRate);
+				blockDCFilter[c][i].setFrequency(22.05 / sampleRate);
+			}
 		}
 	}
-	
+
 
 	void process(const ProcessArgs& args) override {
-		const int rangeIndex = params[RANGE_PARAM].getValue();
 
-		float pitch = ranges[rangeIndex] * params[TUNE_PARAM].getValue() + inputs[VOCT1_INPUT].getVoltage() + inputs[VOCT2_INPUT].getVoltage();
-		pitch += params[OCTAVE_PARAM].getValue() - 3;
-		const float freq = dsp::FREQ_C4 * dsp::exp2_taylor5(pitch);
-		// -1 to +1
-		const float pwmCV = params[PWM_CV_PARAM].getValue() * clamp(inputs[PWM_INPUT].getVoltage() / 10.f, -1.f, 1.f);
-		const float pulseWidthLimit = limitPW ? 0.05f : 0.0f;
-
-		// pwm in [-0.25 : +0.25]
-		const float pwm = 2 * clamp(0.5 - params[PWM_PARAM].getValue() + 0.5 * pwmCV, -0.5f + pulseWidthLimit, 0.5f - pulseWidthLimit);
-
-		const int oversamplingRatio = oversampler[0].getOversamplingRatio();
+		const int numActivePolyphonyEngines = getNumActivePolyphonyEngines();
 
 		// work out active outputs
-		std::vector<int> connectedOutputs = getConnectedOutputs();
+		const std::vector<int> connectedOutputs = getConnectedOutputs();
 		if (connectedOutputs.size() == 0) {
 			return;
 		}
 		// only process up to highest active channel
 		const int highestOutput = *std::max_element(connectedOutputs.begin(), connectedOutputs.end());
-		const float deltaPhase = freq * args.sampleTime / oversamplingRatio;
 
-		//  process sync
-		if (syncTrigger.process(inputs[SYNC_INPUT].getVoltage())) {
-			phase = 0.5f;
-		}
+		for (int c = 0; c < numActivePolyphonyEngines; c += 4) {
 
-		for (int i = 0; i < oversamplingRatio; i++) {
+			const int rangeIndex = params[RANGE_PARAM].getValue();
+			float_4 pitch = ranges[rangeIndex] * params[TUNE_PARAM].getValue() + inputs[VOCT1_INPUT].getPolyVoltageSimd<float_4>(c) + inputs[VOCT2_INPUT].getPolyVoltageSimd<float_4>(c);
+			pitch += params[OCTAVE_PARAM].getValue() - 3;
+			const float_4 freq = dsp::FREQ_C4 * dsp::exp2_taylor5(pitch);
+			// -1 to +1
+			const float_4 pwmCV = params[PWM_CV_PARAM].getValue() * clamp(inputs[PWM_INPUT].getPolyVoltageSimd<float_4>(c) / 10.f, -1.f, 1.f);
+			const float_4 pulseWidthLimit = limitPW ? 0.05f : 0.0f;
 
-			phase += deltaPhase;
-			phase -= std::floor(phase);
+			// pwm in [-0.25 : +0.25]
+			const float_4 pwm = 2 * clamp(0.5 - params[PWM_PARAM].getValue() + 0.5 * pwmCV, -0.5f + pulseWidthLimit, 0.5f - pulseWidthLimit);
 
-			float sum = 0.f;
-			for (int c = 0; c <= highestOutput; c++) {
-				// derive phases for higher octaves from base phase (this keeps things in sync!)
-				const float n = (float)(1 << c);
-				// this is on [0, 1]
-				const float effectivePhase = n * std::fmod(phase, 1 / n);
-				const float gainCV = clamp(inputs[GAIN_01F_INPUT + c].getNormalVoltage(10.f) / 10.f, 0.f, 1.0f);
-				const float gain = params[GAIN_01F_PARAM + c].getValue() * gainCV;
+			const int oversamplingRatio = oversampler[0][0].getOversamplingRatio();
 
-				const float waveTri = 1.0 - 2.0 * std::abs(2.f * effectivePhase - 1.0);
-				// build square from triangle + comparator
-				const float waveSquare = (waveTri > pwm) ? +1 : -1;
+			const float_4 deltaPhase = freq * args.sampleTime / oversamplingRatio;
 
-				sum += (useTriangleCore ? waveTri : waveSquare) * gain;
-				sum = clamp(sum, -1.f, 1.f);
+			//  process sync
+			float_4 sync = syncTrigger[c / 4].process(inputs[SYNC_INPUT].getPolyVoltageSimd<float_4>(c));
+			phase[c / 4] = simd::ifelse(sync, 0.5f, phase[c / 4]);
 
-				if (outputs[OUT_01F_OUTPUT + c].isConnected()) {
-					oversampler[c].getOSBuffer()[i] = sum;
-					sum = 0.f;
+
+			for (int i = 0; i < oversamplingRatio; i++) {
+
+				phase[c / 4] += deltaPhase;
+				phase[c / 4] -= simd::floor(phase[c / 4]);
+
+				float_4 sum = {};
+				for (int oct = 0; oct <= highestOutput; oct++) {
+					// derive phases for higher octaves from base phase (this keeps things in sync!)
+					const float_4 n = (float)(1 << oct);
+					// this is on [0, 1]
+					const float_4 effectivePhase = n * simd::fmod(phase[c / 4], 1 / n);
+					const float_4 gainCV = simd::clamp(inputs[GAIN_01F_INPUT + oct].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f, 0.f, 1.0f);
+					const float_4 gain = params[GAIN_01F_PARAM + oct].getValue() * gainCV;
+
+					const float_4 waveTri = 1.0 - 2.0 * simd::abs(2.f * effectivePhase - 1.0);
+					// build square from triangle + comparator
+					const float_4 waveSquare = simd::ifelse(waveTri > pwm, +1.f, -1.f);
+
+					sum += (useTriangleCore ? waveTri : waveSquare) * gain;
+					sum = clamp(sum, -1.f, 1.f);
+
+					if (outputs[OUT_01F_OUTPUT + oct].isConnected()) {
+						oversampler[oct][c/4].getOSBuffer()[i] = sum;
+						sum = 0.f;
+
+						// DEBUG("here %f %f %f %f %f", phase[c/4][0], waveTri[0], sum[0], gain[0], gainCV[0]);
+					}
+
+					
+
+				}
+
+			} // end of oversampling loop
+
+			// only downsample required channels
+			for (int oct = 0; oct <= highestOutput; oct++) {
+				if (outputs[OUT_01F_OUTPUT + oct].isConnected()) {
+
+					// downsample (if required)
+					float_4 out = (oversamplingRatio > 1) ? oversampler[oct][c/4].downsample() : oversampler[oct][c/4].getOSBuffer()[0];
+					if (removePulseDC) {
+						out = blockDCFilter[oct][c/4].process(out);
+					}
+
+					outputs[OUT_01F_OUTPUT + oct].setVoltageSimd(5.f * out, c);					
 				}
 			}
+		}	// end of polyphony loop
 
-		} // end of oversampling loop
+		for (int connectedOutput : connectedOutputs) {
+			outputs[OUT_01F_OUTPUT + connectedOutput].setChannels(numActivePolyphonyEngines);
+		}
+	}
 
-		// only downsample required channels
-		for (int c = 0; c <= highestOutput; c++) {
-			if (outputs[OUT_01F_OUTPUT + c].isConnected()) {
-				// downsample (if required)
-				float out = (oversamplingRatio > 1) ? oversampler[c].downsample() : oversampler[c].getOSBuffer()[0];
-
-				if (removePulseDC) {
-					out = blockDCFilter[c].process(out);
-				}
-
-				outputs[OUT_01F_OUTPUT + c].setVoltage(5.f * out);
+	// polyphony is defined by the largest number of active channels on voct, pwm or gain inputs
+	int getNumActivePolyphonyEngines() {
+		int activePolyphonyEngines = 1;
+		for (int c = 0; c < NUM_OUTPUTS; c++) {
+			if (inputs[GAIN_01F_INPUT + c].isConnected()) {
+				activePolyphonyEngines = std::max(activePolyphonyEngines, inputs[GAIN_01F_INPUT + c].getChannels());
 			}
 		}
+		activePolyphonyEngines = std::max({activePolyphonyEngines, inputs[VOCT1_INPUT].getChannels(), inputs[VOCT2_INPUT].getChannels()});
+		activePolyphonyEngines = std::max(activePolyphonyEngines, inputs[PWM_INPUT].getChannels());
 
+		return activePolyphonyEngines;
 	}
 
 	std::vector<int> getConnectedOutputs() {
@@ -248,7 +280,7 @@ struct Octaves : Module {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "removePulseDC", json_boolean(removePulseDC));
 		json_object_set_new(rootJ, "limitPW", json_boolean(limitPW));
-		json_object_set_new(rootJ, "oversamplingIndex", json_integer(oversampler[0].getOversamplingIndex()));
+		json_object_set_new(rootJ, "oversamplingIndex", json_integer(oversampler[0][0].getOversamplingIndex()));
 		json_object_set_new(rootJ, "useTriangleCore", json_boolean(useTriangleCore));
 
 		return rootJ;

@@ -315,7 +315,7 @@ private:
 };
 
 // Creates a Butterworth 2*Nth order highpass filter for blocking DC
-template<int N>
+template<int N, typename T>
 struct DCBlockerT {
 
 	DCBlockerT() {
@@ -328,7 +328,7 @@ struct DCBlockerT {
 		recalculateCoefficients();
 	}
 
-	float process(float x) {
+	T process(T x) {
 		for (int idx = 0; idx < N; idx++) {
 			x = blockDCFilter[idx].process(x);
 		}
@@ -345,17 +345,17 @@ private:
 
 		for (int idx = 0; idx < N; idx++) {
 			float Q = 1.0f / (2.0f * std::cos(firstAngle + idx * poleInc));
-			blockDCFilter[idx].setParameters(dsp::BiquadFilter::HIGHPASS, fc_, Q, 1.0f);
+			blockDCFilter[idx].setParameters(dsp::TBiquadFilter<T>::HIGHPASS, fc_, Q, 1.0f);
 		}
 	}
 
 	float fc_;
 	static const int order = 2 * N;
 
-	dsp::BiquadFilter blockDCFilter[N];
+	dsp::TBiquadFilter<T> blockDCFilter[N];
 };
 
-typedef DCBlockerT<2> DCBlocker;
+typedef DCBlockerT<2, float> DCBlocker;
 
 /** When triggered, holds a high value for a specified time before going low again */
 struct PulseGenerator_4 {
