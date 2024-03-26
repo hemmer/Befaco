@@ -98,6 +98,7 @@ struct Octaves : Module {
 
 	bool limitPW = true;
 	bool removePulseDC = false;
+	bool useTriangleCore = false;
 	static const int NUM_OUTPUTS = 6;
 	const float ranges[3] = {4.f, 1.f, 1.f / 12.f}; 	// full, octave, semitone
 
@@ -105,7 +106,7 @@ struct Octaves : Module {
 	chowdsp::VariableOversampling<6, float> oversampler[NUM_OUTPUTS]; 	// uses a 2*6=12th order Butterworth filter
 	int oversamplingIndex = 1; 	// default is 2^oversamplingIndex == x2 oversampling
 
-	DCBlocker blockDCFilter;			// optionally block DC with RC filter @ ~22 Hz
+	DCBlocker blockDCFilter[NUM_OUTPUTS];			// optionally block DC with RC filter @ ~22 Hz
 	dsp::SchmittTrigger syncTrigger; 	// for hard sync
 
 	Octaves() {
@@ -154,8 +155,8 @@ struct Octaves : Module {
 		for (int c = 0; c < NUM_OUTPUTS; c++) {
 			oversampler[c].setOversamplingIndex(oversamplingIndex);
 			oversampler[c].reset(sampleRate);
+			blockDCFilter[c].setFrequency(22.05 / sampleRate);
 		}
-		blockDCFilter.setFrequency(22.05 / sampleRate);
 	}
 	
 
@@ -164,7 +165,7 @@ struct Octaves : Module {
 
 		float pitch = ranges[rangeIndex] * params[TUNE_PARAM].getValue() + inputs[VOCT1_INPUT].getVoltage() + inputs[VOCT2_INPUT].getVoltage();
 		pitch += params[OCTAVE_PARAM].getValue() - 3;
-		float freq = dsp::FREQ_C4 * dsp::exp2_taylor5(pitch);
+		const float freq = dsp::FREQ_C4 * dsp::exp2_taylor5(pitch);
 		// -1 to +1
 		const float pwmCV = params[PWM_CV_PARAM].getValue() * clamp(inputs[PWM_INPUT].getVoltage() / 10.f, -1.f, 1.f);
 		const float pulseWidthLimit = limitPW ? 0.05f : 0.0f;
@@ -206,7 +207,7 @@ struct Octaves : Module {
 				// build square from triangle + comparator
 				const float waveSquare = (waveTri > pwm) ? +1 : -1;
 
-				sum += waveSquare * gain;
+				sum += (useTriangleCore ? waveTri : waveSquare) * gain;
 				sum = clamp(sum, -1.f, 1.f);
 
 				if (outputs[OUT_01F_OUTPUT + c].isConnected()) {
@@ -224,7 +225,7 @@ struct Octaves : Module {
 				float out = (oversamplingRatio > 1) ? oversampler[c].downsample() : oversampler[c].getOSBuffer()[0];
 
 				if (removePulseDC) {
-					out = blockDCFilter.process(out);
+					out = blockDCFilter[c].process(out);
 				}
 
 				outputs[OUT_01F_OUTPUT + c].setVoltage(5.f * out);
@@ -248,6 +249,8 @@ struct Octaves : Module {
 		json_object_set_new(rootJ, "removePulseDC", json_boolean(removePulseDC));
 		json_object_set_new(rootJ, "limitPW", json_boolean(limitPW));
 		json_object_set_new(rootJ, "oversamplingIndex", json_integer(oversampler[0].getOversamplingIndex()));
+		json_object_set_new(rootJ, "useTriangleCore", json_boolean(useTriangleCore));
+
 		return rootJ;
 	}
 
@@ -267,6 +270,11 @@ struct Octaves : Module {
 		if (oversamplingIndexJ) {
 			oversamplingIndex = json_integer_value(oversamplingIndexJ);
 			onSampleRateChange();
+		}
+
+		json_t* useTriangleCoreJ = json_object_get(rootJ, "useTriangleCore");
+		if (useTriangleCoreJ) {
+			useTriangleCore = json_boolean_value(useTriangleCoreJ);
 		}
 	}
 };
@@ -322,6 +330,7 @@ struct OctavesWidget : ModuleWidget {
 		[ = ](Menu * menu) {
 			menu->addChild(createBoolPtrMenuItem("Limit pulsewidth (5\%-95\%)", "", &module->limitPW));
 			menu->addChild(createBoolPtrMenuItem("Remove pulse DC", "", &module->removePulseDC));
+			menu->addChild(createBoolPtrMenuItem("Use triangle core", "", &module->useTriangleCore));
 		}
 		                                ));
 
