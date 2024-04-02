@@ -33,6 +33,7 @@ extern Model* modelBurst;
 extern Model* modelMidiThing;
 extern Model* modelVoltio;
 extern Model* modelOctaves;
+extern Model* modelPonyVCF;
 
 struct Knurlie : SvgScrew {
 	Knurlie() {
