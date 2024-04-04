@@ -1,6 +1,6 @@
 {
   "slug": "Befaco",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "license": "GPL-3.0-or-later",
   "name": "Befaco",
   "brand": "Befaco",
@@ -340,7 +340,7 @@
       "modularGridUrl": "https://www.modulargrid.net/e/befaco-octaves-vco",
       "tags": [
         "Hardware clone",
-        "VCO"
+        "Oscillator"
       ]
     },
     {

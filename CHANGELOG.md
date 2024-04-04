@@ -1,11 +1,16 @@
 # Change Log
 
 
-## v2.6.0 (in progress)
+## v2.7.0 (in progress)
   * Midi Thing 2
     * Initial release
+
+
+## v2.6.0
   * Octaves 
     * Initial release
+  * Misc
+    * Better default values for ADSR and Burst
 
 
 ## v2.5.0
