@@ -1,5 +1,13 @@
 # Change Log
 
+
+## v2.6.0
+  * Octaves 
+    * Initial release
+  * Misc
+    * Better default values for ADSR and Burst
+
+
 ## v2.5.0
   * Burst
     * Initial release

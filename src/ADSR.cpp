@@ -231,10 +231,10 @@ struct ADSR : Module {
 		configButton(MANUAL_TRIGGER_PARAM, "Trigger envelope");
 		configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Envelope shape");
 
-		configParam(ATTACK_PARAM, 0.f, 1.f, 0.f, "Attack time", "s", maxStageTime / minStageTime, minStageTime);
-		configParam(DECAY_PARAM, 0.f, 1.f, 0.f, "Decay time", "s", maxStageTime / minStageTime, minStageTime);
-		configParam(SUSTAIN_PARAM, 0.f, 1.f, 0.f, "Sustain level", "%", 0.f, 100.f);
-		configParam(RELEASE_PARAM, 0.f, 1.f, 0.f, "Release time", "s", maxStageTime / minStageTime, minStageTime);
+		configParam(ATTACK_PARAM, 0.f, 1.f, 0.4f, "Attack time", "s", maxStageTime / minStageTime, minStageTime);
+		configParam(DECAY_PARAM, 0.f, 1.f, 0.4f, "Decay time", "s", maxStageTime / minStageTime, minStageTime);
+		configParam(SUSTAIN_PARAM, 0.f, 1.f, 0.5f, "Sustain level", "%", 0.f, 100.f);
+		configParam(RELEASE_PARAM, 0.f, 1.f, 0.4f, "Release time", "s", maxStageTime / minStageTime, minStageTime);
 
 		configInput(TRIGGER_INPUT, "Trigger");
 		configInput(CV_ATTACK_INPUT, "Attack CV");

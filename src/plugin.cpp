@@ -29,4 +29,5 @@ void init(rack::Plugin *p) {
 	p->addModel(modelMotionMTR);
 	p->addModel(modelBurst);
 	p->addModel(modelVoltio);
+	p->addModel(modelOctaves);
 }
