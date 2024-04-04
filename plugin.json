@@ -24,18 +24,6 @@
       ]
     },
     {
-      "slug": "EvenVCO2",
-      "name": "Even VCO (beta)",
-      "description": "Oscillator including even-harmonic waveform",
-      "manualUrl": "https://www.befaco.org/even-vco/",
-      "modularGridUrl": "https://www.modulargrid.net/e/befaco-even-vco-",
-      "tags": [
-        "VCO",
-        "Hardware clone",
-        "Polyphonic"
-      ]
-    },
-    {
       "slug": "Rampage",
       "name": "Rampage",
       "description": "Dual ramp generator",
@@ -309,18 +297,6 @@
       ]
     },
     {
-      "slug": "MidiThingV2",
-      "name": "MIDI Thing V2",
-      "description": "Hardware MIDI Thing v2 is a flexible MIDI to CV converter, this module acts as a bridge from VCV",
-      "manualUrl": "https://github.com/VCVRack/Befaco/blob/v2/docs/MIDIThingV2.md",
-      "modularGridUrl": "https://www.modulargrid.net/e/befaco-midi-thing-v2",
-      "tags": [
-        "External",
-        "MIDI",
-        "Hardware clone"
-      ]
-    },
-    {
       "slug": "Voltio",
       "name": "Voltio",
       "description": "An accurate voltage source and precision adder.",
@@ -341,18 +317,6 @@
       "tags": [
         "Hardware clone",
         "VCO"
-      ]
-    },
-    {
-      "slug": "PonyVCF",
-      "name": "PonyVCF",
-      "description": "Space-conscious lowpass filter and volume processor.",
-      "manualUrl": "https://www.befaco.org/pony-vcf/",
-      "modularGridUrl": "https://www.modulargrid.net/e/befaco-pony-vcf-",
-      "tags": [
-        "Hardware clone",
-        "Mixer",
-        "Filter"
       ]
     }
   ]
