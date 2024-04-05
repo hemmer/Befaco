@@ -4,6 +4,8 @@
 ## v2.7.0 (in progress)
   * Midi Thing 2
     * Initial release
+  * PonyVCF
+    * Initial release
 
 
 ## v2.6.0
