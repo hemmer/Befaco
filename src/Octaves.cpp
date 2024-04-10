@@ -3,60 +3,6 @@
 
 using namespace simd;
 
-float aliasSuppressedSaw(const float* phases, float pw) {
-	float sawBuffer[3];
-	for (int i = 0; i < 3; ++i) {
-		float p = 2 * phases[i] - 1.0; 		// range -1 to +1
-		float pwp = p + 2 * pw;				// phase after pw (pw in [0, 1])
-		pwp += simd::ifelse(pwp > 1, -2, simd::ifelse(pwp < -1, +2, 0));     			// modulo on [-1, +1]
-		sawBuffer[i] = (pwp * pwp * pwp - pwp) / 6.0;	// eq 11
-	}
-
-	return (sawBuffer[0] - 2.0 * sawBuffer[1] + sawBuffer[2]);
-}
-
-float aliasSuppressedOffsetSaw(const float* phases, float pw) {
-	float sawOffsetBuff[3];
-
-	for (int i = 0; i < 3; ++i) {
-		float pwp = 2 * phases[i] - 2 * pw; 		// range -1 to +1
-
-		pwp += simd::ifelse(pwp > 1, -2, 0);     			// modulo on [-1, +1]
-		sawOffsetBuff[i] = (pwp * pwp * pwp - pwp) / 6.0;	// eq 11
-	}
-	return (sawOffsetBuff[0] - 2.0 * sawOffsetBuff[1] + sawOffsetBuff[2]);
-}
-
-template<typename T>
-class HardClipperADAA {
-public:
-
-	T process(T x) {
-		T y = simd::ifelse(simd::abs(x - xPrev) < 1e-5,
-		                   f(0.5 * (xPrev + x)),
-		                   (F(x) - F(xPrev)) / (x - xPrev));
-
-		xPrev = x;
-		return y;
-	}
-
-
-	static T f(T x) {
-		return simd::ifelse(simd::abs(x) < 1, x, simd::sgn(x));
-	}
-
-	static T F(T x) {
-		return simd::ifelse(simd::abs(x) < 1, 0.5 * x * x, x * simd::sgn(x) - 0.5);
-	}
-
-	void reset() {
-		xPrev = 0.f;
-	}
-
-private:
-	T xPrev = 0.f;
-};
-
 struct Octaves : Module {
 	enum ParamId {
 		PWM_CV_PARAM,
@@ -106,7 +52,7 @@ struct Octaves : Module {
 
 	float_4 phase[4] = {};		// phase for core waveform, in [0, 1]
 	chowdsp::VariableOversampling<6, float_4> oversampler[NUM_OUTPUTS][4]; 	// uses a 2*6=12th order Butterworth filter
-	int oversamplingIndex = 1; 	// default is 2^oversamplingIndex == x2 oversampling
+	int oversamplingIndex = 2; 	// default is 2^oversamplingIndex == x4 oversampling
 
 	DCBlockerT<2, float_4> blockDCFilter[NUM_OUTPUTS][4];			// optionally block DC with RC filter @ ~22 Hz
 	dsp::TSchmittTrigger<float_4> syncTrigger[4]; 	// for hard sync
@@ -205,13 +151,20 @@ struct Octaves : Module {
 
 				float_4 sum = {};
 				for (int oct = 0; oct <= highestOutput; oct++) {
+
+					const float_4 gainCV = simd::clamp(inputs[GAIN_01F_INPUT + oct].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f, 0.f, 1.0f);
+					const float_4 gain = params[GAIN_01F_PARAM + oct].getValue() * gainCV;
+
+					// don't bother processing if gain is zero and no output is connected
+					const bool isGainZero = simd::movemask(gain != 0.f) == 0; 
+					if (isGainZero && !outputs[OUT_01F_OUTPUT + oct].isConnected()) {
+						continue;
+					}
+
 					// derive phases for higher octaves from base phase (this keeps things in sync!)
 					const float_4 n = (float)(1 << oct);
 					// this is on [0, 1]
 					const float_4 effectivePhase = n * simd::fmod(phase[c / 4], 1 / n);
-					const float_4 gainCV = simd::clamp(inputs[GAIN_01F_INPUT + oct].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f, 0.f, 1.0f);
-					const float_4 gain = params[GAIN_01F_PARAM + oct].getValue() * gainCV;
-
 					const float_4 waveTri = 1.0 - 2.0 * simd::abs(2.f * effectivePhase - 1.0);
 					// build square from triangle + comparator
 					const float_4 waveSquare = simd::ifelse(waveTri > pwm, +1.f, -1.f);
@@ -324,7 +277,7 @@ struct OctavesWidget : ModuleWidget {
 		addParam(createParamCentered<BefacoTinyKnobLightGrey>(mm2px(Vec(52.138, 15.037)), module, Octaves::PWM_CV_PARAM));
 		addParam(createParam<CKSSVert7>(mm2px(Vec(22.171, 30.214)), module, Octaves::OCTAVE_PARAM));
 		addParam(createParamCentered<BefacoTinyKnobLightGrey>(mm2px(Vec(10.264, 33.007)), module, Octaves::TUNE_PARAM));
-		addParam(createParamCentered<Davies1900hLargeRedKnob>(mm2px(Vec(45.384, 40.528)), module, Octaves::PWM_PARAM));
+		addParam(createParamCentered<Davies1900hLargeGreyKnob>(mm2px(Vec(45.384, 40.528)), module, Octaves::PWM_PARAM));
 		addParam(createParam<CKSSThreeHorizontal>(mm2px(Vec(6.023, 48.937)), module, Octaves::RANGE_PARAM));
 		addParam(createParam<BefacoSlidePotSmall>(mm2px(Vec(2.9830, 60.342)), module, Octaves::GAIN_01F_PARAM));
 		addParam(createParam<BefacoSlidePotSmall>(mm2px(Vec(12.967, 60.342)), module, Octaves::GAIN_02F_PARAM));
