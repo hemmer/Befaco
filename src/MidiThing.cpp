@@ -397,7 +397,7 @@ struct MidiThing : Module {
 	}
 };
 
-struct MidiThingPort : PJ301MPort {
+struct MidiThingPort : BefacoInputPort {
 	int row = 0, col = 0;
 	MidiThing* module;
 
