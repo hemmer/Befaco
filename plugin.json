@@ -343,18 +343,6 @@
         "Oscillator",
         "Polyphonic"
       ]
-    },
-    {
-      "slug": "PonyVCF",
-      "name": "PonyVCF",
-      "description": "Space-conscious lowpass filter and volume processor.",
-      "manualUrl": "https://www.befaco.org/pony-vcf/",
-      "modularGridUrl": "https://www.modulargrid.net/e/befaco-pony-vcf-",
-      "tags": [
-        "Hardware clone",
-        "Mixer",
-        "Filter"
-      ]
     }
   ]
 }
