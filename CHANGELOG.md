@@ -1,6 +1,13 @@
 # Change Log
 
 
+## v2.7.0
+  * Midi Thing 2
+    * Initial release
+  * Octaves
+    * Better default oversampling setting (x4)
+
+
 ## v2.6.0
   * Octaves 
     * Initial release

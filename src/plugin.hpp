@@ -29,6 +29,7 @@ extern Model* modelChannelStrip;
 extern Model* modelPonyVCO;
 extern Model* modelMotionMTR;
 extern Model* modelBurst;
+extern Model* modelMidiThing;
 extern Model* modelVoltio;
 extern Model* modelOctaves;
 
