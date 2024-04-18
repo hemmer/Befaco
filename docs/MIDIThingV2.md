@@ -17,3 +17,12 @@ To use, first ensure the MIDI Thing v2 is plugged into your computer, and visibl
 To use, simply wire CV which you wish to send to the hardware to the matching input on the VCV module. Note that you will need to select the range, which can be done by right-clicking on the matching box (see below). Options are 0/10v, -5/5v, -10/0v, 0/8v, 0/5v. Note that the module is **not** designed to work with audio rate signals, just CV.
 
 ![MIDI Thing Voltage Range](img/VoltageRange.png "MIDI Thing v2 Voltage Range")
+
+## Update Rate 
+
+Midi Thing v2 VCV allows the user to configure the update rate at which data is sent over MIDI. This must be shared between the channels, so if we set the hardware to update at 1 kHz, 1 active channel will update at 1 kHz, 2 active channels will update at 500 Hz, 4 active channels at 250 Hz and so on. The total update rate (to be shared between channels) is set from the context menu, noting that higher update rates will use more CPU. The effect of the update rate on a 90 Hz saw (blue trace) can be seen in the bottom image, specifically that the temporal resolution of the reconstructed signal (red traces) improves as the update rate is increased from 500 Hz to 1000 Hz to 2000 Hz. 
+
+![MIDI Thing Update Rates](img/UpdateRate.png "MIDI Thing v2 Update Ranges Menu")
+![MIDI Thing Update Rates](img/UpdateRatesScope.png "MIDI Thing v2 Update Ranges Menu")
+
+

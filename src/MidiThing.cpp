@@ -295,7 +295,6 @@ struct MidiThing : Module {
 			midi::Message msg;
 			uint8_t outData[32] = {};
 			while (inputQueue.tryPop(&msg, args.frame)) {
-				// DEBUG("msg (size: %d): %s", msg.getSize(), msg.toString().c_str());
 
 				uint8_t outLen = decodeSysEx(&msg.bytes[0], outData, msg.bytes.size(), false);
 				if (outLen > 3) {
@@ -305,7 +304,6 @@ struct MidiThing : Module {
 					if (channel >= 0 && channel < NUM_INPUTS) {
 						if (outData[outLen - 1] < LASTPORTMODE) {
 							portModes[channel] = (PORTMODE_t) outData[outLen - 1];
-							// DEBUG("Channel %d, %d: mode %d (%s)", outData[2], channel, portModes[channel], cfgPortModeNames[portModes[channel]]);
 						}
 					}
 				}
