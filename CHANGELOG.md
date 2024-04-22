@@ -1,5 +1,30 @@
 # Change Log
 
+
+## v2.7.0
+  * Midi Thing 2
+    * Initial release
+  * Octaves
+    * Better default oversampling setting (x4)
+
+
+## v2.6.0
+  * Octaves 
+    * Initial release
+  * Misc
+    * Better default values for ADSR and Burst
+
+
+## v2.5.0
+  * Burst
+    * Initial release
+  * Voltio
+    * Initial release
+  * PonyVCO
+    * Now polyphonic
+  * Misc
+    * Fix trigger inputs to follow Rack voltage standards (Kickall, Muxlicer, Rampage)
+
 ## v2.4.1
   * Rampage
     * Fix SIMD bug
