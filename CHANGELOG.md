@@ -1,11 +1,15 @@
 # Change Log
 
 
-## v2.7.0 (in progress)
-  * Midi Thing 2
-    * Initial release
+## v2.8.0 (in progress)
   * PonyVCF
     * Initial release
+
+## v2.7.0
+  * Midi Thing 2
+    * Initial release
+  * Octaves
+    * Better default oversampling setting (x4)
 
 
 ## v2.6.0
