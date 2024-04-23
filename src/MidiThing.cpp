@@ -485,9 +485,15 @@ struct LEDDisplay : LightWidget {
 
 		if (font && font->handle >= 0) {
 
-			std::string text = "?-?v";  // fallback if module not yet defined
+			std::string text;
 			if (module) {
 				text = module->cfgPortModeNames[module->getVoltageMode(row, col) + 1];
+			}
+			else {
+				// fallback if module not yet defined
+				const char* cfgPortModeNames[5] = {"0/10v", "-5/5v", "-10/0v", "0/8v", "0/5v"};
+				const int randomModeForDisplay = rack::random::u32() % 5;
+				text = cfgPortModeNames[randomModeForDisplay];
 			}
 			char buffer[numChars + 1];
 			int l = text.size();
