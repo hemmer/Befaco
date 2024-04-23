@@ -2,7 +2,7 @@ name: Build VCV Rack Plugin
 on: [push, pull_request]
 
 env:
-  rack-sdk-version: 2.2.1
+  rack-sdk-version: 2.5.1
   rack-plugin-toolchain-dir: /home/build/rack-plugin-toolchain
 
 defaults:
@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [win-x64, linux-x64]
+        platform: [win-x64, lin-x64]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -68,7 +68,7 @@ jobs:
 
   publish:
     name: Publish plugin
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     needs: [build, build-mac]
     steps:
       - uses: actions/download-artifact@v3
