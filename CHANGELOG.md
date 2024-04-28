@@ -1,14 +1,14 @@
 # Change Log
 
+## v2.8.0 (in progress)
+  * PonyVCF
+    * Initial release
+
 ## v2.7.1
   * Midi Thing 2
     * Remove -10 to 0 V configuration
     * Add menu option to set all channels mode at once
     * Fix appearance in module browser
-
-## v2.8.0 (in progress)
-  * PonyVCF
-    * Initial release
 
 ## v2.7.0
   * Midi Thing 2
@@ -16,13 +16,11 @@
   * Octaves
     * Better default oversampling setting (x4)
 
-
 ## v2.6.0
   * Octaves 
     * Initial release
   * Misc
     * Better default values for ADSR and Burst
-
 
 ## v2.5.0
   * Burst
@@ -57,7 +55,6 @@
     * Address high CPU usage when using EQ sliders
 
 ## v2.2.0
-
   * StereoStrip
     * Initial release
 
@@ -84,19 +81,15 @@
   * UI overhaul
 
 ## v1.2.0
-
   * Released new modules: Muxlicer, Mex, Morphader, VC ADSR, Sampling Modulator, ST Mix
   * Removed DC offset from EvenVCO pulse output
 
 ## v1.1.1
-
   * Fixed issue with A*B+C summing logic
 
 ## v1.1.0
-
   * New modules added: Kickall, Percall, Chopping Kinky, and Hexmix VCA
   * Added polyphony support for some modules
 
 ## v1.0.0
-
   * Initial set of modules: EvenVCO, Rampage, A*B+C, Spring Reverb, Mixer, Slew Limiter, Dual Atenuverter
