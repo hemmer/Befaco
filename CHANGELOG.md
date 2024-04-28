@@ -1,5 +1,10 @@
 # Change Log
 
+## v2.7.1
+  * Midi Thing 2
+    * Remove -10 to 0 V configuration
+    * Add menu option to set all channels mode at once
+    * Fix appearance in module browser
 
 ## v2.7.0
   * Midi Thing 2

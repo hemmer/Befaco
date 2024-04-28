@@ -104,18 +104,16 @@ struct MidiThing : Module {
 		NOPORTMODE = 0,
 		MODE10V,
 		MODEPN5V,
-		MODENEG10V,
 		MODE8V,
 		MODE5V,
 
 		LASTPORTMODE
 	};
 
-	const char* cfgPortModeNames[7] = {
+	const char* cfgPortModeNames[6] = {
 		"No Mode",
 		"0/10v",
 		"-5/5v",
-		"-10/0v",
 		"0/8v",
 		"0/5v",
 		""
@@ -179,7 +177,13 @@ struct MidiThing : Module {
 		midiOut.sendMessage(msg);
 		// DEBUG("Predef %d msg request sent: %s", mergeOn, msg.toString().c_str());
 	}
-
+	void setVoltageModeOnHardwareAllChannels(PORTMODE_t outputMode_) {
+		for (int row = 0; row < 4; ++row) {
+			for (int col = 0; col < 3; ++col) {
+				setVoltageModeOnHardware(row, col, outputMode_);
+			}
+		}
+	}
 
 	void setVoltageModeOnHardware(uint8_t row, uint8_t col, PORTMODE_t outputMode_) {
 		uint8_t port = 3 * row + col;
@@ -243,7 +247,6 @@ struct MidiThing : Module {
 		switch (portModes[channel]) {
 			case MODE10V: return 0 - tol < voltage && voltage < 10 + tol;
 			case MODEPN5V: return -5 - tol < voltage && voltage < 5 + tol;
-			case MODENEG10V: return -10 - tol < voltage && voltage < 0 + tol;
 			case MODE8V: return 0 - tol < voltage && voltage < 8 + tol;
 			case MODE5V: return 0 - tol < voltage && voltage < 5 + tol;
 			default: return false;
@@ -254,7 +257,6 @@ struct MidiThing : Module {
 		switch (portModes[channel]) {
 			case MODE10V: return rescale(clamp(voltage, 0.f, 10.f), 0.f, +10.f, 0, 16383);
 			case MODEPN5V: return rescale(clamp(voltage, -5.f, 5.f), -5.f, +5.f, 0, 16383);
-			case MODENEG10V: return rescale(clamp(voltage, -10.f, 0.f), -10.f, +0.f, 0, 16383);
 			case MODE8V: return rescale(clamp(voltage, 0.f, 8.f), 0.f, +8.f, 0, 16383);
 			case MODE5V: return rescale(clamp(voltage, 0.f, 5.f), 0.f, +5.f, 0, 16383);
 			default: return 0;
@@ -405,7 +407,7 @@ struct MidiThingPort : BefacoInputPort {
 		std::string label = string::f("Voltage Mode Port %d", 3 * row + col + 1);
 
 		menu->addChild(createIndexSubmenuItem(label,
-		{"0 to 10v", "-5 to 5v", "-10 to 0v", "0 to 8v", "0 to 5v"},
+		{"0 to 10v", "-5 to 5v", "0 to 8v", "0 to 5v"},
 		[ = ]() {
 			return module->getVoltageMode(row, col);
 		},
@@ -485,10 +487,16 @@ struct LEDDisplay : LightWidget {
 
 		if (font && font->handle >= 0) {
 
-			std::string text = "?-?v";  // fallback if module not yet defined
+			std::string text;
 			if (module) {
 				text = module->cfgPortModeNames[module->getVoltageMode(row, col) + 1];
 			}
+			else {
+				// fallback if module not yet defined
+				const char* cfgPortModeNames[4] = {"0/10v", "-5/5v", "0/8v", "0/5v"};
+				const int randomModeForDisplay = rack::random::u32() % 4;
+				text = cfgPortModeNames[randomModeForDisplay];
+			}			
 			char buffer[numChars + 1];
 			int l = text.size();
 			if (l > numChars)
@@ -515,9 +523,9 @@ struct LEDDisplay : LightWidget {
 
 			menu->addChild(createMenuLabel(string::f("Voltage mode port %d:", col + 3 * row + 1)));
 
-			const std::string labels[5] = {"0 to 10v", "-5 to 5v", "-10 to 0v", "0 to 8v", "0 to 5v"};
+			const std::string labels[4] = {"0 to 10v", "-5 to 5v", "0 to 8v", "0 to 5v"};
 
-			for (int i = 0; i < 5; ++i) {
+			for (int i = 0; i < 4; ++i) {
 				menu->addChild(createCheckMenuItem(labels[i], "",
 				[ = ]() {
 					return module->getVoltageMode(row, col) == i;
@@ -797,6 +805,17 @@ struct MidiThingWidget : ModuleWidget {
 
 		float updateRate = module->updateRates[module->updateRateIdx] / module->numActiveChannels;
 		menu->addChild(createMenuLabel(string::f("Per-channel MIDI update rate: %.3g Hz", updateRate)));
+
+		menu->addChild(createIndexSubmenuItem("Set mode for all channels",
+		{"0 to 10v", "-5 to 5v", "0 to 8v", "0 to 5v"},
+		[ = ]() {
+			return -1;
+		},
+		[ = ](int modeIdx) {
+			MidiThing::PORTMODE_t mode = (MidiThing::PORTMODE_t)(modeIdx + 1);
+			module->setVoltageModeOnHardwareAllChannels(mode);
+		}
+		                                     ));
 	}
 };
 
