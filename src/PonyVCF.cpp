@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include <sst/filters.h>
 
 using simd::float_4;
 
@@ -97,15 +98,21 @@ struct PonyVCF : Module {
 
 	LadderFilter<float_4> filters[4];
 
+	sst::filters::QuadFilterUnitState qfus;
+	sst::filters::FilterCoefficientMaker<> coefMaker;
+	sst::filters::FilterUnitQFPtr filterUnitPtr{nullptr};
+
+	float delayBufferData[4][sst::filters::utilities::MAX_FB_COMB + sst::filters::utilities::SincTable::FIRipol_N] {};
+
 	PonyVCF() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(CV1_PARAM, 0.f, 1.f, 0.f, "CV1 Attenuator");
+		configParam(CV1_PARAM, 0.f, 1.f, 1.f, "CV1 Attenuator");
 		configParam(RES_PARAM, 0.f, 1.f, 0.f, "Resonance");
 		configParam(FREQ_PARAM, 0.f, 1.f, 0.f, "Frequency");
-		configParam(GAIN1_PARAM, 0.f, 1.2f, 1.f, "Gain Channel 1");
-		configParam(GAIN2_PARAM, 0.f, 1.2f, 1.f, "Gain Channel 2");
-		configParam(GAIN3_PARAM, 0.f, 1.2f, 1.f, "Gain Channel 3");
-		configParam(ROUTING_PARAM, 0.f, 1.f, 0.f, "VCA routing");
+		configParam(GAIN1_PARAM, 0.f, 1.25f, 1.f, "Gain Channel 1");
+		configParam(GAIN2_PARAM, 0.f, 1.25f, 1.f, "Gain Channel 2");
+		configParam(GAIN3_PARAM, 0.f, 1.25f, 1.f, "Gain Channel 3");
+		configSwitch(ROUTING_PARAM, 0.f, 1.f, 0.f, "VCA routing", {"CV1 (Filter CV and VCA)", "CV1 (Filter CV only)"});
 
 		configInput(IN1_INPUT, "Channel 1");
 		configInput(RES_INPUT, "Resonance CV");
@@ -117,6 +124,10 @@ struct PonyVCF : Module {
 
 		configOutput(OUTPUT, "Main");
 
+
+		filterUnitPtr = sst::filters::GetQFPtrFilterUnit(sst::filters::FilterType::fut_vintageladder,
+		                sst::filters::FilterSubType::st_Driven);
+
 		onReset();
 	}
 
@@ -124,6 +135,17 @@ struct PonyVCF : Module {
 	void onReset() override {
 		for (int i = 0; i < 4; i++)
 			filters[i].reset();
+		coefMaker.setSampleRateAndBlockSize(APP->engine->getSampleRate(), 1);
+
+		std::fill(qfus.R, &qfus.R[sst::filters::n_filter_registers], _mm_setzero_ps());
+		std::fill(qfus.C, &qfus.C[sst::filters::n_cm_coeffs], _mm_setzero_ps());
+
+		for (int i = 0; i < 4; ++i) {
+			std::fill(delayBufferData[i], delayBufferData[i] + sst::filters::utilities::MAX_FB_COMB + sst::filters::utilities::SincTable::FIRipol_N, 0.0f);
+			qfus.DB[i] = delayBufferData[i];
+			qfus.active[i] = (int) 0xffffffff;
+			qfus.WP[i] = 0;
+		}
 	}
 
 	float_4 prevOut[4] = {};
@@ -136,10 +158,10 @@ struct PonyVCF : Module {
 		float resParam = params[RES_PARAM].getValue();
 		float freqParam = params[FREQ_PARAM].getValue();
 		float freqCvParam = params[CV1_PARAM].getValue();
-		
+
 
 		int channels = std::max({1, inputs[IN1_INPUT].getChannels(), inputs[IN2_INPUT].getChannels(), inputs[IN3_INPUT].getChannels()});
-		
+
 		for (int c = 0; c < channels; c += 4) {
 			auto& filter = filters[c / 4];
 
@@ -147,7 +169,7 @@ struct PonyVCF : Module {
 			input += inputs[IN2_INPUT].getVoltageSimd<float_4>(c) * params[GAIN2_PARAM].getValue();
 			input += inputs[IN3_INPUT].getNormalVoltageSimd<float_4>(prevOut[c / 4], c) * params[GAIN3_PARAM].getValue();
 
-			
+
 			// input = Saturator<float_4>::process(input / 5.0f) * 1.1f;
 			input = clip(input / 5.0f) * 1.1f;
 
@@ -161,13 +183,24 @@ struct PonyVCF : Module {
 
 			// Get pitch
 			float_4 pitch = 5 * freqParam + inputs[CV1_INPUT].getPolyVoltageSimd<float_4>(c) * freqCvParam + inputs[CV2_INPUT].getPolyVoltageSimd<float_4>(c);
-			// Set cutoff
+			// Set cutoff (Hz)
 			float_4 cutoff = dsp::FREQ_C4 * dsp::exp2_taylor5(pitch);
-			// Without oversampling, we must limit to 8000 Hz or so @ 44100 Hz
-			cutoff = clamp(cutoff, 1.f, args.sampleRate / 2.f);
 
-			// Without oversampling, we must limit to 8000 Hz or so @ 44100 Hz
-			cutoff = clamp(cutoff, 1.f, args.sampleRate * 0.18f);
+
+			coefMaker.MakeCoeffs(cutoff[0], resonance[0], sst::filters::FilterType::fut_vintageladder,
+			                     sst::filters::FilterSubType::st_Driven, nullptr, true);
+
+
+			coefMaker.updateState(qfus, 0);
+
+			float_4 out;
+			out.v = filterUnitPtr(&qfus, input.v);
+
+			outputs[OUTPUT].setVoltageSimd(out, c);
+			continue;
+			
+			/*
+			// ignore for now
 			filter.setCutoff(cutoff);
 
 			// Set outputs
@@ -176,12 +209,23 @@ struct PonyVCF : Module {
 				float_4 resGain = 1.0f / (0.05 + 0.9 * dsp::exp2_taylor5(-8.f * simd::pow(resonance, 2.0)));
 				// float_4 resGain = (1.0f + 8.f * resonance);  // 1st order empirical fit
 				float_4 out = 5.f * filter.lowpass() * resGain;
+
+				float_4 gain = 1.f;
+				if (inputs[VCA_INPUT].isConnected()) {
+					// VCA
+					gain = clamp(inputs[VCA_INPUT].getPolyVoltageSimd<float_4>(c) / 10.f, 0.f, 1.f);
+				}
+				else if (params[ROUTING_PARAM].getValue() == 0 && inputs[CV1_INPUT].isConnected()) {
+					gain = clamp(inputs[CV1_INPUT].getPolyVoltageSimd<float_4>(c) / 10.f, 0.f, 1.f);
+				}
+				out = out * gain;
+
 				outputs[OUTPUT].setVoltageSimd(out, c);
 
 				prevOut[c / 4] = out;
 			}
 
-			// DEBUG("channel %d %g", channels, input[0]);
+			*/
 		}
 
 		outputs[OUTPUT].setChannels(channels);
