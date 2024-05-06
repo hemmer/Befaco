@@ -97,8 +97,9 @@ struct PonyVCF : Module {
 	};
 
 	LadderFilter<float_4> filters[4];
-
-	sst::filters::QuadFilterUnitState qfus;
+	
+	// 4x quad = 16 channels of polyphony
+	sst::filters::QuadFilterUnitState qfus[4];
 	sst::filters::FilterCoefficientMaker<> coefMaker;
 	sst::filters::FilterUnitQFPtr filterUnitPtr{nullptr};
 
@@ -137,14 +138,17 @@ struct PonyVCF : Module {
 			filters[i].reset();
 		coefMaker.setSampleRateAndBlockSize(APP->engine->getSampleRate(), 1);
 
-		std::fill(qfus.R, &qfus.R[sst::filters::n_filter_registers], _mm_setzero_ps());
-		std::fill(qfus.C, &qfus.C[sst::filters::n_cm_coeffs], _mm_setzero_ps());
+		for (int c = 0; c < 4; ++c) {
+			std::fill(qfus[c].R, &qfus[c].R[sst::filters::n_filter_registers], _mm_setzero_ps());
+			std::fill(qfus[c].C, &qfus[c].C[sst::filters::n_cm_coeffs], _mm_setzero_ps());
 
-		for (int i = 0; i < 4; ++i) {
-			std::fill(delayBufferData[i], delayBufferData[i] + sst::filters::utilities::MAX_FB_COMB + sst::filters::utilities::SincTable::FIRipol_N, 0.0f);
-			qfus.DB[i] = delayBufferData[i];
-			qfus.active[i] = (int) 0xffffffff;
-			qfus.WP[i] = 0;
+
+			for (int i = 0; i < 4; ++i) {
+				std::fill(delayBufferData[i], delayBufferData[i] + sst::filters::utilities::MAX_FB_COMB + sst::filters::utilities::SincTable::FIRipol_N, 0.0f);
+				qfus[c].DB[i] = delayBufferData[i];
+				qfus[c].active[i] = (int) 0xffffffff;
+				qfus[c].WP[i] = 0;
+			}
 		}
 	}
 
@@ -162,6 +166,7 @@ struct PonyVCF : Module {
 
 		int channels = std::max({1, inputs[IN1_INPUT].getChannels(), inputs[IN2_INPUT].getChannels(), inputs[IN3_INPUT].getChannels()});
 
+		// process channels in blocks of 4
 		for (int c = 0; c < channels; c += 4) {
 			auto& filter = filters[c / 4];
 
@@ -186,19 +191,20 @@ struct PonyVCF : Module {
 			// Set cutoff (Hz)
 			float_4 cutoff = dsp::FREQ_C4 * dsp::exp2_taylor5(pitch);
 
+			// serially update each of the four internal channels of the quadfilterstate object
+			for (int i = 0; i < 4; i++) {
+				coefMaker.MakeCoeffs(cutoff[i], resonance[i], sst::filters::FilterType::fut_vintageladder,
+				                     sst::filters::FilterSubType::st_Driven, nullptr, true);
 
-			coefMaker.MakeCoeffs(cutoff[0], resonance[0], sst::filters::FilterType::fut_vintageladder,
-			                     sst::filters::FilterSubType::st_Driven, nullptr, true);
-
-
-			coefMaker.updateState(qfus, 0);
+				coefMaker.updateState(qfus[c / 4], i);
+			}
 
 			float_4 out;
-			out.v = filterUnitPtr(&qfus, input.v);
+			out.v = filterUnitPtr(&qfus[c / 4], input.v);
 
 			outputs[OUTPUT].setVoltageSimd(out, c);
 			continue;
-			
+
 			/*
 			// ignore for now
 			filter.setCutoff(cutoff);

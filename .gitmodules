@@ -1,6 +1,6 @@
-[submodule "dep/sst-filters"]
-	path = dep/sst-filters
+[submodule "libs/sst-filters"]
+	path = libs/sst-filters
 	url = https://github.com/surge-synthesizer/sst-filters.git
-[submodule "dep/sst-basic-blocks"]
-	path = dep/sst-basic-blocks
+[submodule "libs/sst-basic-blocks"]
+	path = libs/sst-basic-blocks
 	url = https://github.com/surge-synthesizer/sst-basic-blocks.git
