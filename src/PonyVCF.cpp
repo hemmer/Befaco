@@ -97,11 +97,13 @@ struct PonyVCF : Module {
 	};
 
 	LadderFilter<float_4> filters[4];
-	
+
 	// 4x quad = 16 channels of polyphony
 	sst::filters::QuadFilterUnitState qfus[4];
-	sst::filters::FilterCoefficientMaker<> coefMaker;
+	sst::filters::FilterCoefficientMaker<> coefMaker[16];
 	sst::filters::FilterUnitQFPtr filterUnitPtr{nullptr};
+	const int BLOCK_SIZE = 1;
+
 
 	float delayBufferData[4][sst::filters::utilities::MAX_FB_COMB + sst::filters::utilities::SincTable::FIRipol_N] {};
 
@@ -127,16 +129,16 @@ struct PonyVCF : Module {
 
 
 		filterUnitPtr = sst::filters::GetQFPtrFilterUnit(sst::filters::FilterType::fut_vintageladder,
-		                sst::filters::FilterSubType::st_Driven);
+		                sst::filters::FilterSubType::st_vintage_type1_compensated);
 
 		onReset();
 	}
 
 
 	void onReset() override {
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < 4; i++) {
 			filters[i].reset();
-		coefMaker.setSampleRateAndBlockSize(APP->engine->getSampleRate(), 1);
+		}
 
 		for (int c = 0; c < 4; ++c) {
 			std::fill(qfus[c].R, &qfus[c].R[sst::filters::n_filter_registers], _mm_setzero_ps());
@@ -148,11 +150,14 @@ struct PonyVCF : Module {
 				qfus[c].DB[i] = delayBufferData[i];
 				qfus[c].active[i] = (int) 0xffffffff;
 				qfus[c].WP[i] = 0;
+
+				coefMaker[4 * c + i].setSampleRateAndBlockSize(APP->engine->getSampleRate(), BLOCK_SIZE);
 			}
 		}
 	}
 
 	float_4 prevOut[4] = {};
+	int processPosition = 0;
 
 	void process(const ProcessArgs& args) override {
 		if (!outputs[OUTPUT].isConnected()) {
@@ -191,18 +196,28 @@ struct PonyVCF : Module {
 			// Set cutoff (Hz)
 			float_4 cutoff = dsp::FREQ_C4 * dsp::exp2_taylor5(pitch);
 
-			// serially update each of the four internal channels of the quadfilterstate object
-			for (int i = 0; i < 4; i++) {
-				coefMaker.MakeCoeffs(cutoff[i], resonance[i], sst::filters::FilterType::fut_vintageladder,
-				                     sst::filters::FilterSubType::st_Driven, nullptr, true);
+			float_4 cutoff_midi = 12 * pitch;
 
-				coefMaker.updateState(qfus[c / 4], i);
+
+			//if (processPosition >= BLOCK_SIZE) {
+			{
+				DEBUG("cutoff midi: %g, cutoff: %g", cutoff_midi[0], cutoff[0]);
+
+				// serially update each of the four internal channels of the quadfilterstate object
+				for (int i = 0; i < 4; i++) {
+					coefMaker[c + i].MakeCoeffs(cutoff_midi[i], resonance[i], sst::filters::FilterType::fut_vintageladder,
+					                            sst::filters::FilterSubType::st_Driven, nullptr, true);
+
+					coefMaker[c + i].updateState(qfus[c / 4], i);
+				}
+				processPosition = 0;
 			}
 
-			float_4 out;
-			out.v = filterUnitPtr(&qfus[c / 4], input.v);
+			float_4 out = 5.f * filterUnitPtr(&qfus[c / 4], input.v);
 
 			outputs[OUTPUT].setVoltageSimd(out, c);
+
+
 			continue;
 
 			/*
