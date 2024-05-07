@@ -111,7 +111,7 @@ struct PonyVCF : Module {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(CV1_PARAM, 0.f, 1.f, 1.f, "CV1 Attenuator");
 		configParam(RES_PARAM, 0.f, 1.f, 0.f, "Resonance");
-		configParam(FREQ_PARAM, 0.f, 1.f, 0.f, "Frequency");
+		configParam(FREQ_PARAM, -4.f, 7.f, 0.f, "Frequency");
 		configParam(GAIN1_PARAM, 0.f, 1.25f, 1.f, "Gain Channel 1");
 		configParam(GAIN2_PARAM, 0.f, 1.25f, 1.f, "Gain Channel 2");
 		configParam(GAIN3_PARAM, 0.f, 1.25f, 1.f, "Gain Channel 3");
@@ -152,6 +152,7 @@ struct PonyVCF : Module {
 				qfus[c].WP[i] = 0;
 
 				coefMaker[4 * c + i].setSampleRateAndBlockSize(APP->engine->getSampleRate(), BLOCK_SIZE);
+				coefMaker[4 * c + i].Reset();
 			}
 		}
 	}
@@ -173,7 +174,6 @@ struct PonyVCF : Module {
 
 		// process channels in blocks of 4
 		for (int c = 0; c < channels; c += 4) {
-			auto& filter = filters[c / 4];
 
 			float_4 input = inputs[IN1_INPUT].getVoltageSimd<float_4>(c) * params[GAIN1_PARAM].getValue();
 			input += inputs[IN2_INPUT].getVoltageSimd<float_4>(c) * params[GAIN2_PARAM].getValue();
@@ -189,24 +189,27 @@ struct PonyVCF : Module {
 			// Set resonance
 			float_4 resonance = resParam + inputs[RES_INPUT].getPolyVoltageSimd<float_4>(c) / 10.f;
 			resonance = clamp(resonance, 0.f, 1.f);
-			filter.resonance = simd::pow(resonance, 2) * 10.f;
 
 			// Get pitch
-			float_4 pitch = 5 * freqParam + inputs[CV1_INPUT].getPolyVoltageSimd<float_4>(c) * freqCvParam + inputs[CV2_INPUT].getPolyVoltageSimd<float_4>(c);
-			// Set cutoff (Hz)
-			float_4 cutoff = dsp::FREQ_C4 * dsp::exp2_taylor5(pitch);
-
-			float_4 cutoff_midi = 12 * pitch;
-
+			float_4 voct = freqParam + inputs[CV1_INPUT].getPolyVoltageSimd<float_4>(c) * freqCvParam; 
+			//pitch = pitch + inputs[CV2_INPUT].getPolyVoltageSimd<float_4>(c);
+			float_4 pitch_midi = (voct + 5) * 12 - 69;
+			
 
 			//if (processPosition >= BLOCK_SIZE) {
 			{
-				DEBUG("cutoff midi: %g, cutoff: %g", cutoff_midi[0], cutoff[0]);
+				 // DEBUG("cutoff midi: %g, pitch: %g, pitch_2: %g", cutoff_midi[0], pitch[0], pitch_2[0]);
 
 				// serially update each of the four internal channels of the quadfilterstate object
 				for (int i = 0; i < 4; i++) {
-					coefMaker[c + i].MakeCoeffs(cutoff_midi[i], resonance[i], sst::filters::FilterType::fut_vintageladder,
-					                            sst::filters::FilterSubType::st_Driven, nullptr, true);
+
+                    for (int f = 0; f < sst::filters::n_cm_coeffs; ++f)
+                    {
+                        coefMaker[c + i].C[f] = qfus[c/4].C[f][i];
+                    }
+
+					coefMaker[c + i].MakeCoeffs(pitch_midi[i], resonance[i], sst::filters::FilterType::fut_vintageladder,
+					                            sst::filters::FilterSubType::st_vintage_type1_compensated, nullptr, true);
 
 					coefMaker[c + i].updateState(qfus[c / 4], i);
 				}
