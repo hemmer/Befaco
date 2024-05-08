@@ -33,5 +33,4 @@ void init(rack::Plugin *p) {
 	p->addModel(modelVoltio);
 	p->addModel(modelOctaves);
 	p->addModel(modelPonyVCF);
-	// p->addModel(modelLadderVCF);
 }

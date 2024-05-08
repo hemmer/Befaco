@@ -112,7 +112,7 @@ struct EvenVCO2 : Module {
 	}
 
 	chowdsp::VariableOversampling<6, float_4> oversampler[NUM_OUTPUTS][4]; 	// uses a 2*6=12th order Butterworth filter
-	int oversamplingIndex = 1; 	// default is 2^oversamplingIndex == x2 oversampling
+	int oversamplingIndex = 2; 	// default is 2^oversamplingIndex == x4 oversampling
 
 	void process(const ProcessArgs& args) override {
 

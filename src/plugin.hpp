@@ -34,7 +34,6 @@ extern Model* modelMidiThing;
 extern Model* modelVoltio;
 extern Model* modelOctaves;
 extern Model* modelPonyVCF;
-// extern Model* modelLadderVCF;
 
 struct Knurlie : SvgScrew {
 	Knurlie() {
@@ -335,6 +334,12 @@ struct DCBlockerT {
 			x = blockDCFilter[idx].process(x);
 		}
 		return x;
+	}
+
+	void reset() {
+		for (int idx = 0; idx < N; idx++) {
+			blockDCFilter[idx].reset();
+		}
 	}
 
 private:
