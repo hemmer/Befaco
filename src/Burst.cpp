@@ -183,7 +183,7 @@ struct Burst : Module {
 	Burst() {
 		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
 		configSwitch(Burst::CYCLE_PARAM, 0.0, 1.0, 0.0, "Mode", {"One-shot", "Cycle"});
-		auto quantityParam = configParam(Burst::QUANTITY_PARAM, 1, MAX_REPETITIONS, 0, "Number of bursts");
+		auto quantityParam = configParam(Burst::QUANTITY_PARAM, 1, MAX_REPETITIONS, 4, "Number of bursts");
 		quantityParam->snapEnabled = true;
 		configButton(Burst::TRIGGER_PARAM, "Manual Trigger");
 		configParam(Burst::QUANTITY_CV_PARAM, 0.0, 1.0, 1.0, "Quantity CV");

@@ -28,5 +28,7 @@ void init(rack::Plugin *p) {
 	p->addModel(modelPonyVCO);
 	p->addModel(modelMotionMTR);
 	p->addModel(modelBurst);
+	p->addModel(modelMidiThing);
 	p->addModel(modelVoltio);
+	p->addModel(modelOctaves);
 }

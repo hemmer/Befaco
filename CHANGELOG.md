@@ -1,5 +1,25 @@
 # Change Log
 
+## v2.7.1
+  * Midi Thing 2
+    * Remove -10 to 0 V configuration
+    * Add menu option to set all channels mode at once
+    * Fix appearance in module browser
+
+## v2.7.0
+  * Midi Thing 2
+    * Initial release
+  * Octaves
+    * Better default oversampling setting (x4)
+
+
+## v2.6.0
+  * Octaves 
+    * Initial release
+  * Misc
+    * Better default values for ADSR and Burst
+
+
 ## v2.5.0
   * Burst
     * Initial release

@@ -2,18 +2,6 @@
 
 using simd::float_4;
 
-struct Davies1900hLargeLightGreyKnobCustom : Davies1900hLargeLightGreyKnob {
-	widget::SvgWidget* bg;
-
-	Davies1900hLargeLightGreyKnobCustom() {
-		minAngle = -0.83 * M_PI;
-		maxAngle = M_PI;
-
-		bg = new widget::SvgWidget;
-		fb->addChildBelow(bg, tw);
-	}
-};
-
 struct Voltio : Module {
 	enum ParamId {
 		OCT_PARAM,
@@ -40,7 +28,7 @@ struct Voltio : Module {
 		auto octParam = configParam(OCT_PARAM, 0.f, 10.f, 0.f, "Octave");
 		octParam->snapEnabled = true;
 
-		configSwitch(RANGE_PARAM, 0.f, 1.f, 0.f, "Range", {"-5 to +5", "0 to 10"});
+		configSwitch(RANGE_PARAM, 0.f, 1.f, 0.f, "Range", {"0 to 10", "-5 to +5"});
 		auto semitonesParam = configParam(SEMITONES_PARAM, 0.f, 11.f, 0.f, "Semitones");
 		semitonesParam->snapEnabled = true;
 
@@ -79,7 +67,10 @@ struct VoltioWidget : ModuleWidget {
 
 		addParam(createParamCentered<Davies1900hLargeLightGreyKnob>(mm2px(Vec(15.0, 20.828)), module, Voltio::OCT_PARAM));
 		addParam(createParamCentered<BefacoSwitch>(mm2px(Vec(22.083, 44.061)), module, Voltio::RANGE_PARAM));
-		addParam(createParamCentered<Davies1900hLargeLightGreyKnobCustom>(mm2px(Vec(15.0, 67.275)), module, Voltio::SEMITONES_PARAM));
+		auto p = createParamCentered<Davies1900hLargeLightGreyKnob>(mm2px(Vec(15.0, 67.275)), module, Voltio::SEMITONES_PARAM);
+		p->minAngle = -0.83 * M_PI;
+		p->maxAngle = M_PI;
+		addParam(p);
 
 		addInput(createInputCentered<BefacoInputPort>(mm2px(Vec(7.117, 111.003)), module, Voltio::SUM_INPUT));
 
