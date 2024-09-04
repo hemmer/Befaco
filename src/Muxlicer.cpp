@@ -381,23 +381,23 @@ struct Muxlicer : Module {
 
 		for (int i = 0; i < SEQUENCE_LENGTH; ++i) {
 			configParam(Muxlicer::LEVEL_PARAMS + i, 0.0, 1.0, 1.0, string::f("Gain step %d", i + 1));
-			configInput(Muxlicer::MUX_INPUTS + i, string::f("Step %d In", i + 1));
-			configOutput(Muxlicer::GATE_OUTPUTS + i, string::f("Gate step %d Out", i + 1));
-			configOutput(Muxlicer::MUX_OUTPUTS + i, string::f("Step %d Out", i + 1));
+			configInput(Muxlicer::MUX_INPUTS + i, string::f("Step %d", i + 1));
+			configOutput(Muxlicer::GATE_OUTPUTS + i, string::f("Gate step %d", i + 1));
+			configOutput(Muxlicer::MUX_OUTPUTS + i, string::f("Step %d", i + 1));
 			configLight(Muxlicer::GATE_LIGHTS + i, string::f("Step %d gates", i + 1));
 		}
 		configOutput(Muxlicer::EOC_OUTPUT, "End of cycle trigger");
 		configOutput(Muxlicer::CLOCK_OUTPUT, "Clock");
 		configOutput(Muxlicer::ALL_GATES_OUTPUT, "All gates");
-		configOutput(Muxlicer::ALL_OUTPUT, "All Out");
-		configOutput(Muxlicer::COM_OUTPUT, "COM Out");
+		configOutput(Muxlicer::ALL_OUTPUT, "All");
+		configOutput(Muxlicer::COM_OUTPUT, "COM I/O");
 
 		configInput(Muxlicer::GATE_MODE_INPUT, "Gate mode CV");
 		configInput(Muxlicer::ADDRESS_INPUT, "Address CV");
 		configInput(Muxlicer::CLOCK_INPUT, "Clock");
 		configInput(Muxlicer::RESET_INPUT, "One shot/reset");
-		configInput(Muxlicer::COM_INPUT, "COM In");
-		configInput(Muxlicer::ALL_INPUT, "All In");
+		configInput(Muxlicer::COM_INPUT, "COM I/O");
+		configInput(Muxlicer::ALL_INPUT, "All");
 
 		onReset();
 	}

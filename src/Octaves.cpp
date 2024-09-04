@@ -135,7 +135,7 @@ struct Octaves : Module {
 
 			const int oversamplingRatio = oversampler[0][0].getOversamplingRatio();
 
-			const float_4 deltaPhase = freq * args.sampleTime / oversamplingRatio;
+			const float_4 deltaPhase = simd::clamp(freq * args.sampleTime / oversamplingRatio, 0.f, 0.5f);
 
 			//  process sync
 			float_4 sync = syncTrigger[c / 4].process(inputs[SYNC_INPUT].getPolyVoltageSimd<float_4>(c));
@@ -145,7 +145,8 @@ struct Octaves : Module {
 			for (int i = 0; i < oversamplingRatio; i++) {
 
 				phase[c / 4] += deltaPhase;
-				phase[c / 4] -= simd::floor(phase[c / 4]);
+				// metamodule change: simd::floor is quite slow on A7
+				phase[c / 4] -= simd::ifelse(phase[c / 4] > 1.f, 1.f, 0.f);
 
 				float_4 sum = {};
 				for (int oct = 0; oct <= highestOutput; oct++) {
