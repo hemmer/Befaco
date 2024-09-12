@@ -113,6 +113,8 @@ struct NoisePlethora : Module {
 		CUTOFF_CV_C_PARAM,
 		FILTER_TYPE_C_PARAM,
 		SOURCE_C_PARAM,
+		SWITCH_BANK_AND_PROGRAM_PARAM,
+		SWITCH_SECTION_PARAM,
 		NUM_PARAMS
 	};
 	enum InputIds {
@@ -138,6 +140,8 @@ struct NoisePlethora : Module {
 	};
 	enum LightIds {
 		BANK_LIGHT,
+		SECTION_A_ACTIVE_LIGHT,
+		SECTION_B_ACTIVE_LIGHT,
 		NUM_LIGHTS
 	};
 
@@ -177,6 +181,8 @@ struct NoisePlethora : Module {
 	bool programButtonDragged = false;
 	dsp::BooleanTrigger programHoldTrigger;
 	dsp::Timer programHoldTimer;
+	dsp::BooleanTrigger metamoduleBankProgramTrigger;
+	dsp::BooleanTrigger metamoduleSectionTrigger;
 
 	dsp::PulseGenerator updateParamsTimer;
 	const float updateTimeSecs = 0.0029f;
@@ -195,7 +201,7 @@ struct NoisePlethora : Module {
 		configParam(Y_A_PARAM, 0.f, 1.f, 0.5f, "YA");
 		configParam(CUTOFF_CV_A_PARAM, 0.f, 1.f, 0.f, "Cutoff CV A");
 		configSwitch(FILTER_TYPE_A_PARAM, 0.f, 2.f, 0.f, "Filter type", {"Lowpass", "Bandpass", "Highpass"});
-		configParam(PROGRAM_PARAM, -INFINITY, +INFINITY, 0.f, "Program/Bank selection");
+		configParam(PROGRAM_PARAM, 0, 1, 0.f, "Program/Bank selection");
 		configSwitch(FILTER_TYPE_B_PARAM, 0.f, 2.f, 0.f, "Filter type", {"Lowpass", "Bandpass", "Highpass"});
 		configParam(CUTOFF_CV_B_PARAM, 0.f, 1.f, 0.f, "Cutoff B");
 		configParam(X_B_PARAM, 0.f, 1.f, 0.5f, "XB");
@@ -208,6 +214,9 @@ struct NoisePlethora : Module {
 		configParam(RES_C_PARAM, 0.f, 1.f, 0.f, "Resonance C");
 		configParam(CUTOFF_CV_C_PARAM, 0.f, 1.f, 0.f, "Cutoff CV C");
 		configSwitch(SOURCE_C_PARAM, 0.f, 1.f, 0.f, "Filter source", {"Gritty", "White"});
+		configButton(SWITCH_BANK_AND_PROGRAM_PARAM, "Switch program/bank for current active section");
+		configButton(SWITCH_SECTION_PARAM, "Switch Top/Bottom");
+
 
 		configInput(X_A_INPUT, "XA CV");
 		configInput(Y_A_INPUT, "YA CV");
@@ -433,25 +442,23 @@ struct NoisePlethora : Module {
 	void processProgramBankKnobLogic(const ProcessArgs& args) {
 
 		// program knob will either change program for current bank...
-		if (programButtonDragged) {
-			// work out the change (in discrete increments) since the program/bank knob started being dragged
-			const int delta = (int)(dialResolution * (params[PROGRAM_PARAM].getValue() - programKnobReferenceState));
+		{
 
 			if (programKnobMode == PROGRAM_MODE) {
 				const int numProgramsForCurrentBank = getBankForIndex(programSelector.getCurrent().getBank()).getSize();
+				const int currentProgram = programSelector.getCurrent().getProgram();
+				const int newProgramFromKnob = (int) std::round((numProgramsForCurrentBank - 1) * params[PROGRAM_PARAM].getValue());
 
-				if (delta != 0) {
-					const int newProgramFromKnob = unsigned_modulo(programSelector.getCurrent().getProgram() + delta, numProgramsForCurrentBank);
-					programKnobReferenceState = params[PROGRAM_PARAM].getValue();
+				if (newProgramFromKnob != currentProgram) {
 					setAlgorithmViaProgram(newProgramFromKnob);
 				}
 			}
 			// ...or change bank, (trying to) keep program the same
 			else {
+				const int currentBank = programSelector.getCurrent().getBank();
+				const int newBankFromKnob = (int) std::round((numBanks - 1) * params[PROGRAM_PARAM].getValue());
 
-				if (delta != 0) {
-					const int newBankFromKnob = unsigned_modulo(programSelector.getCurrent().getBank() + delta, numBanks);
-					programKnobReferenceState = params[PROGRAM_PARAM].getValue();
+				if (currentBank != newBankFromKnob) {
 					setAlgorithmViaBank(newBankFromKnob);
 				}
 			}
@@ -497,6 +504,23 @@ struct NoisePlethora : Module {
 		if (!programButtonDragged) {
 			programKnobReferenceState = params[PROGRAM_PARAM].getValue();
 		}
+
+		if (metamoduleBankProgramTrigger.process(params[SWITCH_BANK_AND_PROGRAM_PARAM].getValue())) {
+			if (programKnobMode == PROGRAM_MODE) {
+				programKnobMode = BANK_MODE;
+			}
+			else {
+				programKnobMode = PROGRAM_MODE;
+			}
+		}
+
+		if (metamoduleSectionTrigger.process(params[SWITCH_SECTION_PARAM].getValue())) {
+			programSelector.setMode(!programSelector.getMode());
+		}
+
+		lights[BANK_LIGHT].setBrightness(programKnobMode == BANK_MODE);
+		lights[SECTION_A_ACTIVE_LIGHT].setBrightness(programSelector.getMode() == SECTION_A);
+		lights[SECTION_B_ACTIVE_LIGHT].setBrightness(programSelector.getMode() == SECTION_B);
 	}
 
 	void setAlgorithmViaProgram(int newProgram) {
@@ -572,6 +596,18 @@ struct NoisePlethora : Module {
 		json_object_set_new(rootJ, "blockDC", json_boolean(blockDC));
 
 		return rootJ;
+	}
+
+	size_t get_display_text(int led_id, std::span<char> text) override {
+		// TODO: work out which section we're in based on led_id
+		NoisePlethora::Section section = NoisePlethora::SECTION_A;
+		
+		std::string chars = section == SECTION_A ? textDisplayA : textDisplayB;
+
+		size_t chars_to_copy = std::min(text.size(), chars.length());
+		std::copy(chars.begin(), std::next(chars.begin(), chars_to_copy), text.begin());
+
+		return chars_to_copy;
 	}
 };
 
@@ -770,6 +806,12 @@ struct NoisePlethoraWidget : ModuleWidget {
 		addParam(createParam<CKSSNarrow3>(mm2px(Vec(41.494, 38.579)), module, NoisePlethora::FILTER_TYPE_A_PARAM));
 
 		// (bank)
+		auto switchBankProgramParam = createParamCentered<VCVButton>(mm2px(Vec(30.866, 49.503)), module, NoisePlethora::SWITCH_BANK_AND_PROGRAM_PARAM);
+		switchBankProgramParam->hide();
+		addParam(switchBankProgramParam);
+		auto switchSectionParam = createParamCentered<VCVButton>(mm2px(Vec(30.866, 49.503)), module, NoisePlethora::SWITCH_SECTION_PARAM);
+		switchSectionParam->hide();
+		addParam(switchSectionParam);
 		addParam(createParamCentered<BefacoTinyKnobSnapPress>(mm2px(Vec(30.866, 49.503)), module, NoisePlethora::PROGRAM_PARAM));
 
 		// B params
@@ -806,7 +848,9 @@ struct NoisePlethoraWidget : ModuleWidget {
 		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(34.981, 114.852)), module, NoisePlethora::FILTERED_OUTPUT));
 		addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(47.536, 114.852)), module, NoisePlethora::WHITE_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(30.866, 37.422)), module, NoisePlethora::BANK_LIGHT));
+		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(30.866, 37.422)), module, NoisePlethora::BANK_LIGHT));
+		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(22.345, 43.212)), module, NoisePlethora::SECTION_A_ACTIVE_LIGHT));
+		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(22.345, 55.801)), module, NoisePlethora::SECTION_B_ACTIVE_LIGHT));
 
 
 		NoisePlethoraLEDDisplay* displayA = createWidget<NoisePlethoraLEDDisplay>(mm2px(Vec(13.106, 38.172)));
@@ -818,6 +862,16 @@ struct NoisePlethoraWidget : ModuleWidget {
 		displayB->module = module;
 		displayB->section = NoisePlethora::SECTION_B;
 		addChild(displayB);
+
+		TextField* displayAText = createWidget<TextField>(mm2px(Vec(13.106, 38.172)));
+		displayAText->setText("c");
+		displayAText->box.size = mm2px(Vec(9, 14));
+		addChild(displayAText);
+
+		TextField* displayBText = createWidget<TextField>(mm2px(Vec(13.106, 50.712)));
+		displayBText->setText("A");
+		displayBText->box.size = mm2px(Vec(9, 14));
+		addChild(displayBText);
 	}
 
 	void appendContextMenu(Menu* menu) override {
