@@ -142,6 +142,8 @@ struct NoisePlethora : Module {
 		BANK_LIGHT,
 		SECTION_A_ACTIVE_LIGHT,
 		SECTION_B_ACTIVE_LIGHT,
+		SEGMENT_A,
+		SEGMENT_B,
 		NUM_LIGHTS
 	};
 
@@ -214,7 +216,7 @@ struct NoisePlethora : Module {
 		configParam(RES_C_PARAM, 0.f, 1.f, 0.f, "Resonance C");
 		configParam(CUTOFF_CV_C_PARAM, 0.f, 1.f, 0.f, "Cutoff CV C");
 		configSwitch(SOURCE_C_PARAM, 0.f, 1.f, 0.f, "Filter source", {"Gritty", "White"});
-		configButton(SWITCH_BANK_AND_PROGRAM_PARAM, "Switch program/bank for current active section");
+		configButton(SWITCH_BANK_AND_PROGRAM_PARAM, "Switch Program/Bank for current section");
 		configButton(SWITCH_SECTION_PARAM, "Switch Top/Bottom");
 
 
@@ -600,8 +602,8 @@ struct NoisePlethora : Module {
 
 	size_t get_display_text(int led_id, std::span<char> text) override {
 		// TODO: work out which section we're in based on led_id
-		NoisePlethora::Section section = NoisePlethora::SECTION_A;
-		
+		NoisePlethora::Section section = led_id == NoisePlethora::SEGMENT_A ? NoisePlethora::SECTION_A : NoisePlethora::SECTION_B;
+
 		std::string chars = section == SECTION_A ? textDisplayA : textDisplayB;
 
 		size_t chars_to_copy = std::min(text.size(), chars.length());
@@ -852,7 +854,19 @@ struct NoisePlethoraWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(22.345, 43.212)), module, NoisePlethora::SECTION_A_ACTIVE_LIGHT));
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(22.345, 55.801)), module, NoisePlethora::SECTION_B_ACTIVE_LIGHT));
 
+#ifdef METAMODULE
+		MetaModuleDisplay* displayAText = createLight<MetaModuleDisplay>(mm2px(Vec(13.106, 38.172)), module, NoisePlethora::SEGMENT_A);
+		displayAText->font = "Segment7Standard24";
+		displayAText->color = RGB565{(uint8_t)0xff, 0x40, 0x40};
+		displayAText->box.size = mm2px(Vec(9, 14));
+		addChild(displayAText);
 
+		MetaModuleDisplay* displayBText = createLight<MetaModuleDisplay>(mm2px(Vec(13.106, 50.712)), module, NoisePlethora::SEGMENT_B);
+		displayBText->font = "Segment7Standard24";
+		displayBText->color = RGB565{(uint8_t)0xff, 0x40, 0x40};
+		displayBText->box.size = mm2px(Vec(9, 14));
+		addChild(displayBText);
+#else
 		NoisePlethoraLEDDisplay* displayA = createWidget<NoisePlethoraLEDDisplay>(mm2px(Vec(13.106, 38.172)));
 		displayA->module = module;
 		displayA->section = NoisePlethora::SECTION_A;
@@ -862,16 +876,7 @@ struct NoisePlethoraWidget : ModuleWidget {
 		displayB->module = module;
 		displayB->section = NoisePlethora::SECTION_B;
 		addChild(displayB);
-
-		TextField* displayAText = createWidget<TextField>(mm2px(Vec(13.106, 38.172)));
-		displayAText->setText("c");
-		displayAText->box.size = mm2px(Vec(9, 14));
-		addChild(displayAText);
-
-		TextField* displayBText = createWidget<TextField>(mm2px(Vec(13.106, 50.712)));
-		displayBText->setText("A");
-		displayBText->box.size = mm2px(Vec(9, 14));
-		addChild(displayBText);
+#endif
 	}
 
 	void appendContextMenu(Menu* menu) override {
