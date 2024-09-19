@@ -667,7 +667,11 @@ struct BefacoTinyKnobSnapPress : BefacoTinyKnobBlack {
 };
 
 // dervied from https://github.com/countmodula/VCVRackPlugins/blob/v2.0.0/src/components/CountModulaLEDDisplay.hpp
+#ifdef METAMODULE
+struct NoisePlethoraLEDDisplay : MetaModuleDisplay {
+#else
 struct NoisePlethoraLEDDisplay : LightWidget {
+#endif
 	float fontSize = 28;
 	Vec textPos = Vec(2, 25);
 	int numChars = 1;
@@ -854,29 +858,28 @@ struct NoisePlethoraWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(22.345, 43.212)), module, NoisePlethora::SECTION_A_ACTIVE_LIGHT));
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(22.345, 55.801)), module, NoisePlethora::SECTION_B_ACTIVE_LIGHT));
 
-#ifdef METAMODULE
-		MetaModuleDisplay* displayAText = createLight<MetaModuleDisplay>(mm2px(Vec(13.106, 38.172)), module, NoisePlethora::SEGMENT_A);
-		displayAText->font = "Segment7Standard24";
-		displayAText->color = RGB565{(uint8_t)0xff, 0x40, 0x40};
-		displayAText->box.size = mm2px(Vec(9, 14));
-		addChild(displayAText);
 
-		MetaModuleDisplay* displayBText = createLight<MetaModuleDisplay>(mm2px(Vec(13.106, 50.712)), module, NoisePlethora::SEGMENT_B);
-		displayBText->font = "Segment7Standard24";
-		displayBText->color = RGB565{(uint8_t)0xff, 0x40, 0x40};
-		displayBText->box.size = mm2px(Vec(9, 14));
-		addChild(displayBText);
-#else
 		NoisePlethoraLEDDisplay* displayA = createWidget<NoisePlethoraLEDDisplay>(mm2px(Vec(13.106, 38.172)));
 		displayA->module = module;
 		displayA->section = NoisePlethora::SECTION_A;
-		addChild(displayA);
+		#ifdef METAMODULE
+		displayA->font = "Segment7Standard24";
+		displayA->color = RGB565{(uint8_t)0xff, 0x40, 0x40};
+		displayA->box.size = mm2px(Vec(9, 14));		
+		displayA->firstLightId = NoisePlethora::SEGMENT_A;
+		#endif
 
 		NoisePlethoraLEDDisplay* displayB = createWidget<NoisePlethoraLEDDisplay>(mm2px(Vec(13.106, 50.712)));
 		displayB->module = module;
 		displayB->section = NoisePlethora::SECTION_B;
+		#ifdef METAMODULE
+		displayB->font = "Segment7Standard24";
+		displayB->color = RGB565{(uint8_t)0xff, 0x40, 0x40};
+		displayB->box.size = mm2px(Vec(9, 14));
+		displayB->firstLightId = NoisePlethora::SEGMENT_B;
+		#endif
+		addChild(displayA);
 		addChild(displayB);
-#endif
 	}
 
 	void appendContextMenu(Menu* menu) override {
