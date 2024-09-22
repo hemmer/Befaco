@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "noise-plethora/plugins/NoisePlethoraPlugin.hpp"
 #include "noise-plethora/plugins/ProgramSelector.hpp"
+#include "metamodule/VCVTextDisplay.hpp"
 
 enum FilterMode {
 	LOWPASS,
@@ -668,7 +669,7 @@ struct BefacoTinyKnobSnapPress : BefacoTinyKnobBlack {
 
 // dervied from https://github.com/countmodula/VCVRackPlugins/blob/v2.0.0/src/components/CountModulaLEDDisplay.hpp
 #ifdef METAMODULE
-struct NoisePlethoraLEDDisplay : MetaModuleDisplay {
+struct NoisePlethoraLEDDisplay : MetaModule::VCVTextDisplay {
 #else
 struct NoisePlethoraLEDDisplay : LightWidget {
 #endif
@@ -793,6 +794,13 @@ struct NoisePlethoraLEDDisplay : LightWidget {
 	}
 };
 
+struct BefacoTinyKnobTransparent : SvgSwitch {
+	BefacoTinyKnobTransparent() {
+		momentary = true;
+		addFrame(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoTinyKnobTransparent.svg")));
+	}
+};
+
 struct NoisePlethoraWidget : ModuleWidget {
 	NoisePlethoraWidget(NoisePlethora* module) {
 		setModule(module);
@@ -812,12 +820,9 @@ struct NoisePlethoraWidget : ModuleWidget {
 		addParam(createParam<CKSSNarrow3>(mm2px(Vec(41.494, 38.579)), module, NoisePlethora::FILTER_TYPE_A_PARAM));
 
 		// (bank)
-		auto switchBankProgramParam = createParamCentered<VCVButton>(mm2px(Vec(30.866, 49.503)), module, NoisePlethora::SWITCH_BANK_AND_PROGRAM_PARAM);
-		switchBankProgramParam->hide();
-		addParam(switchBankProgramParam);
-		auto switchSectionParam = createParamCentered<VCVButton>(mm2px(Vec(30.866, 49.503)), module, NoisePlethora::SWITCH_SECTION_PARAM);
-		switchSectionParam->hide();
-		addParam(switchSectionParam);
+		addParam(createParamCentered<BefacoTinyKnobTransparent>(mm2px(Vec(30.866, 49.503)), module, NoisePlethora::SWITCH_BANK_AND_PROGRAM_PARAM));
+		addParam(createParamCentered<BefacoTinyKnobTransparent>(mm2px(Vec(30.866, 49.503)), module, NoisePlethora::SWITCH_SECTION_PARAM));
+
 		addParam(createParamCentered<BefacoTinyKnobSnapPress>(mm2px(Vec(30.866, 49.503)), module, NoisePlethora::PROGRAM_PARAM));
 
 		// B params
@@ -862,22 +867,22 @@ struct NoisePlethoraWidget : ModuleWidget {
 		NoisePlethoraLEDDisplay* displayA = createWidget<NoisePlethoraLEDDisplay>(mm2px(Vec(13.106, 38.172)));
 		displayA->module = module;
 		displayA->section = NoisePlethora::SECTION_A;
-		#ifdef METAMODULE
+#ifdef METAMODULE
 		displayA->font = "Segment7Standard24";
 		displayA->color = RGB565{(uint8_t)0xff, 0x40, 0x40};
-		displayA->box.size = mm2px(Vec(9, 14));		
+		displayA->box.size = mm2px(Vec(9, 14));
 		displayA->firstLightId = NoisePlethora::SEGMENT_A;
-		#endif
+#endif
 
 		NoisePlethoraLEDDisplay* displayB = createWidget<NoisePlethoraLEDDisplay>(mm2px(Vec(13.106, 50.712)));
 		displayB->module = module;
 		displayB->section = NoisePlethora::SECTION_B;
-		#ifdef METAMODULE
+#ifdef METAMODULE
 		displayB->font = "Segment7Standard24";
 		displayB->color = RGB565{(uint8_t)0xff, 0x40, 0x40};
 		displayB->box.size = mm2px(Vec(9, 14));
 		displayB->firstLightId = NoisePlethora::SEGMENT_B;
-		#endif
+#endif
 		addChild(displayA);
 		addChild(displayB);
 	}
