@@ -115,12 +115,10 @@ struct Octaves : Module {
 		const int numActivePolyphonyEngines = getNumActivePolyphonyEngines();
 
 		// work out active outputs
-		const std::vector<int> connectedOutputs = getConnectedOutputs();
-		if (connectedOutputs.size() == 0) {
+		const int highestOutput = getMaxConnectedOutput();
+		if (highestOutput == -1) {
 			return;
 		}
-		// only process up to highest active channel
-		const int highestOutput = *std::max_element(connectedOutputs.begin(), connectedOutputs.end());
 
 		for (int c = 0; c < numActivePolyphonyEngines; c += 4) {
 
@@ -200,8 +198,10 @@ struct Octaves : Module {
 			}
 		}	// end of polyphony loop
 
-		for (int connectedOutput : connectedOutputs) {
-			outputs[OUT_01F_OUTPUT + connectedOutput].setChannels(numActivePolyphonyEngines);
+		for (int c = 0; c < NUM_OUTPUTS; c++) {
+			if (outputs[OUT_01F_OUTPUT + c].isConnected()) {
+				outputs[OUT_01F_OUTPUT + c].setChannels(numActivePolyphonyEngines);
+			}
 		}
 	}
 
@@ -219,14 +219,14 @@ struct Octaves : Module {
 		return activePolyphonyEngines;
 	}
 
-	std::vector<int> getConnectedOutputs() {
-		std::vector<int> connectedOutputs;
+	int getMaxConnectedOutput() {
+		int maxChans = -1;
 		for (int c = 0; c < NUM_OUTPUTS; c++) {
 			if (outputs[OUT_01F_OUTPUT + c].isConnected()) {
-				connectedOutputs.push_back(c);
+				maxChans = c;
 			}
 		}
-		return connectedOutputs;
+		return maxChans;
 	}
 
 	json_t* dataToJson() override {

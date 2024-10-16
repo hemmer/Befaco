@@ -14,7 +14,7 @@ Bank::Bank(const BankElem& p1, const BankElem& p2, const BankElem& p3,
 	: programs{p1, p2, p3, p4, p5, p6, p7, p8, p9, p10}
 { }
 
-const std::string Bank::getProgramName(int i) {
+std::string_view Bank::getProgramName(int i) {
 	if (i >= 0 && i < programsPerBank) {
 		return programs[i].name;
 	}
