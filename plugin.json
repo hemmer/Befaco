@@ -341,6 +341,20 @@
       "tags": [
         "Hardware clone",
         "Mixer",
+        "Polyphonic",
+        "Utility"
+      ]
+    },
+    {
+      "slug": "Bandit",
+      "name": "Bandit",
+      "description": "A spectral processing playground.",
+      "tags": [
+        "Equalizer",
+        "Filter",
+        "Hardware clone",
+        "Mixer",
+        "Polyphonic",
         "Utility"
       ]
     }
