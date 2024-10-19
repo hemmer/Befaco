@@ -150,11 +150,11 @@ struct Bandit : Module {
 			const float_4 outHigh = 0.7 * 2 * filterHigh[c / 4][1].process(filterHigh[c / 4][0].process((inHigh + inAll) * highGain));
 			outputs[HIGH_OUTPUT].setVoltageSimd<float_4>(outHigh, c);
 
-
-			mixOutput = outputs[LOW_OUTPUT].isConnected() ? inputs[LOW_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) : outLow;
-			mixOutput += outputs[LOW_MID_OUTPUT].isConnected() ? inputs[LOW_MID_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) : outLowMid;
-			mixOutput += outputs[HIGH_MID_OUTPUT].isConnected() ? inputs[HIGH_MID_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) : outHighMid;
-			mixOutput += outputs[HIGH_OUTPUT].isConnected() ? inputs[HIGH_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) : outHigh;
+			// the fx return input is normalled to the fx send output
+			mixOutput  = inputs[LOW_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outLow, c);
+			mixOutput += inputs[LOW_MID_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outLowMid, c);
+			mixOutput += inputs[HIGH_MID_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outHighMid, c);
+			mixOutput += inputs[HIGH_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outHigh, c);
 			mixOutput = mixOutput * clamp(inputs[ALL_CV_INPUT].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f, 0.f, 1.f);
 
 			outputs[MIX_OUTPUT].setVoltageSimd<float_4>(mixOutput, c);
