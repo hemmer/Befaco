@@ -43,7 +43,7 @@ struct Bandit : Module {
 
 	// float_4 * [4] give 16 polyphony channels, [2] is for cascading biquads
 	dsp::TBiquadFilter<float_4> filterLow[4][2], filterLowMid[4][2], filterHighMid[4][2], filterHigh[4][2];
-	
+
 
 	Bandit() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -82,7 +82,7 @@ struct Bandit : Module {
 		const float highFc = 3800.f / sr;
 		// Qs for cascaded biquads to get Butterworth response, see https://www.earlevel.com/main/2016/09/29/cascading-filters/
 		// technically only for LOWPASS and HIGHPASS, but seems to work well for BANDPASS too
-		const float Q[2] = {0.54119610f, 1.3065630f}; 	
+		const float Q[2] = {0.54119610f, 1.3065630f};
 		const float V = 1.f;
 
 		for (int i = 0; i < 4; ++i) {
@@ -122,7 +122,9 @@ struct Bandit : Module {
 		                                   inputs[LOW_MID_INPUT].getChannels(), inputs[HIGH_MID_INPUT].getChannels(),
 		                                   inputs[HIGH_INPUT].getChannels()});
 
-		
+		const bool allReturnsActiveAndMonophonic = inputs[LOW_RETURN_INPUT].isMonophonic() && inputs[LOW_MID_RETURN_INPUT].isMonophonic() &&
+		  inputs[HIGH_MID_RETURN_INPUT].isMonophonic() && inputs[HIGH_RETURN_INPUT].isMonophonic();
+
 		float_4 mixOutput;
 		for (int c = 0; c < maxPolyphony; c += 4) {
 
@@ -162,7 +164,15 @@ struct Bandit : Module {
 		outputs[LOW_MID_OUTPUT].setChannels(maxPolyphony);
 		outputs[HIGH_MID_OUTPUT].setChannels(maxPolyphony);
 		outputs[HIGH_OUTPUT].setChannels(maxPolyphony);
-		outputs[MIX_OUTPUT].setChannels(maxPolyphony);
+
+		if (allReturnsActiveAndMonophonic) {
+			// special case: if all return paths are connected and monophonic, then output mix should be monophonic			
+			outputs[MIX_OUTPUT].setChannels(1);
+		}
+		else {
+			// however, if it's a mix (some normalled from input, maybe some polyphonic), then it should be polyphonic
+			outputs[MIX_OUTPUT].setChannels(maxPolyphony);
+		}
 
 		if (maxPolyphony == 1) {
 			lights[MIX_LIGHT + 0].setBrightness(0.f);
