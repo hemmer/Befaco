@@ -41,14 +41,16 @@ struct Bandit : Module {
 		LIGHTS_LEN
 	};
 
-	dsp::TBiquadFilter<float_4> filterLow[4], filterLowMid[4], filterHighMid[4], filterHigh[4];
+	// float_4 * [4] give 16 polyphony channels, [2] is for cascading biquads
+	dsp::TBiquadFilter<float_4> filterLow[4][2], filterLowMid[4][2], filterHighMid[4][2], filterHigh[4][2];
+	
 
 	Bandit() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(LOW_GAIN_PARAM, -1.f, 1.f, 0.f, "Low gain");
-		configParam(LOW_MID_GAIN_PARAM, -1.f, 1.f, 0.f, "Low mid gain");
-		configParam(HIGH_MID_GAIN_PARAM, -1.f, 1.f, 0.f, "High mid gain");
-		configParam(HIGH_GAIN_PARAM, -1.f, 1.f, 0.f, "High gain");
+		configParam(LOW_GAIN_PARAM, 0.f, 1.f, 0.f, "Low gain");
+		configParam(LOW_MID_GAIN_PARAM, 0.f, 1.f, 0.f, "Low mid gain");
+		configParam(HIGH_MID_GAIN_PARAM, 0.f, 1.f, 0.f, "High mid gain");
+		configParam(HIGH_GAIN_PARAM, 0.f, 1.f, 0.f, "High gain");
 
 		configInput(LOW_INPUT, "Low");
 		configInput(LOW_MID_INPUT, "Low mid");
@@ -70,8 +72,6 @@ struct Bandit : Module {
 		configOutput(HIGH_MID_OUTPUT, "High mid");
 		configOutput(HIGH_OUTPUT, "High");
 		configOutput(MIX_OUTPUT, "Mix");
-
-		onSampleRateChange();
 	}
 
 	void onSampleRateChange() override {
@@ -79,14 +79,19 @@ struct Bandit : Module {
 		const float lowFc = 300.f / sr;
 		const float lowMidFc = 750.f / sr;
 		const float highMidFc = 1500.f / sr;
-		const float highFc = 5000.f / sr;
-		const float Q = 1.f, V = 1.f;
+		const float highFc = 3800.f / sr;
+		// Qs for cascaded biquads to get Butterworth response, see https://www.earlevel.com/main/2016/09/29/cascading-filters/
+		// technically only for LOWPASS and HIGHPASS, but seems to work well for BANDPASS too
+		const float Q[2] = {0.54119610f, 1.3065630f}; 	
+		const float V = 1.f;
 
 		for (int i = 0; i < 4; ++i) {
-			filterLow[i].setParameters(dsp::TBiquadFilter<float_4>::Type::LOWPASS, lowFc, Q, V);
-			filterLowMid[i].setParameters(dsp::TBiquadFilter<float_4>::Type::BANDPASS, lowMidFc, Q, V);
-			filterHighMid[i].setParameters(dsp::TBiquadFilter<float_4>::Type::BANDPASS, highMidFc, Q, V);
-			filterHigh[i].setParameters(dsp::TBiquadFilter<float_4>::Type::HIGHPASS, highFc, Q, V);
+			for (int stage = 0; stage < 2; ++stage) {
+				filterLow[i][stage].setParameters(dsp::TBiquadFilter<float_4>::Type::LOWPASS, lowFc, Q[stage], V);
+				filterLowMid[i][stage].setParameters(dsp::TBiquadFilter<float_4>::Type::BANDPASS, lowMidFc, Q[stage], V);
+				filterHighMid[i][stage].setParameters(dsp::TBiquadFilter<float_4>::Type::BANDPASS, highMidFc, Q[stage], V);
+				filterHigh[i][stage].setParameters(dsp::TBiquadFilter<float_4>::Type::HIGHPASS, highFc, Q[stage], V);
+			}
 		}
 	}
 
@@ -117,7 +122,8 @@ struct Bandit : Module {
 		                                   inputs[LOW_MID_INPUT].getChannels(), inputs[HIGH_MID_INPUT].getChannels(),
 		                                   inputs[HIGH_INPUT].getChannels()});
 
-
+		
+		float_4 mixOutput;
 		for (int c = 0; c < maxPolyphony; c += 4) {
 
 			const float_4 inLow = inputs[LOW_INPUT].getPolyVoltageSimd<float_4>(c);
@@ -127,30 +133,36 @@ struct Bandit : Module {
 			const float_4 inAll = inputs[ALL_INPUT].getPolyVoltageSimd<float_4>(c);
 
 			const float_4 lowGain = params[LOW_GAIN_PARAM].getValue() * inputs[LOW_CV_INPUT].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f;
-			const float_4 outLow = filterLow[c / 4].process((inLow + inAll) * lowGain);
+			const float_4 outLow = 0.7 * 2 * filterLow[c / 4][1].process(filterLow[c / 4][0].process((inLow + inAll) * lowGain));
 			outputs[LOW_OUTPUT].setVoltageSimd<float_4>(outLow, c);
 
 			const float_4 lowMidGain = params[LOW_MID_GAIN_PARAM].getValue() * inputs[LOW_MID_CV_INPUT].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f;
-			const float_4 outLowMid = filterLowMid[c / 4].process((inLowMid + inAll) * lowMidGain);
+			const float_4 outLowMid = 2 * filterLowMid[c / 4][1].process(filterLowMid[c / 4][0].process((inLowMid + inAll) * lowMidGain));
 			outputs[LOW_MID_OUTPUT].setVoltageSimd<float_4>(outLowMid, c);
 
 			const float_4 highMidGain = params[HIGH_MID_GAIN_PARAM].getValue() * inputs[HIGH_MID_CV_INPUT].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f;
-			const float_4 outHighMid = filterHighMid[c / 4].process((inHighMid + inAll) * highMidGain);
+			const float_4 outHighMid = 2 * filterHighMid[c / 4][1].process(filterHighMid[c / 4][0].process((inHighMid + inAll) * highMidGain));
 			outputs[HIGH_MID_OUTPUT].setVoltageSimd<float_4>(outHighMid, c);
 
 			const float_4 highGain = params[HIGH_GAIN_PARAM].getValue() * inputs[HIGH_CV_INPUT].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f;
-			const float_4 outHigh = filterHigh[c / 4].process((inHigh + inAll) * highGain);
+			const float_4 outHigh = 0.7 * 2 * filterHigh[c / 4][1].process(filterHigh[c / 4][0].process((inHigh + inAll) * highGain));
 			outputs[HIGH_OUTPUT].setVoltageSimd<float_4>(outHigh, c);
 
-			const float_4 fxReturnSum = inputs[LOW_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) +
-			                            inputs[LOW_MID_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) +
-			                            inputs[HIGH_MID_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) +
-			                            inputs[HIGH_RETURN_INPUT].getPolyVoltageSimd<float_4>(c);
 
-			outputs[MIX_OUTPUT].setVoltageSimd<float_4>(fxReturnSum, c);
+			mixOutput = outputs[LOW_OUTPUT].isConnected() ? inputs[LOW_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) : outLow;
+			mixOutput += outputs[LOW_MID_OUTPUT].isConnected() ? inputs[LOW_MID_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) : outLowMid;
+			mixOutput += outputs[HIGH_MID_OUTPUT].isConnected() ? inputs[HIGH_MID_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) : outHighMid;
+			mixOutput += outputs[HIGH_OUTPUT].isConnected() ? inputs[HIGH_RETURN_INPUT].getPolyVoltageSimd<float_4>(c) : outHigh;
+			mixOutput = mixOutput * clamp(inputs[ALL_CV_INPUT].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f, 0.f, 1.f);
+
+			outputs[MIX_OUTPUT].setVoltageSimd<float_4>(mixOutput, c);
 		}
 
 		outputs[LOW_OUTPUT].setChannels(maxPolyphony);
+		outputs[LOW_MID_OUTPUT].setChannels(maxPolyphony);
+		outputs[HIGH_MID_OUTPUT].setChannels(maxPolyphony);
+		outputs[HIGH_OUTPUT].setChannels(maxPolyphony);
+		outputs[MIX_OUTPUT].setChannels(maxPolyphony);
 
 		if (maxPolyphony == 1) {
 			lights[MIX_LIGHT + 0].setBrightness(0.f);
