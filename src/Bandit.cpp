@@ -43,35 +43,57 @@ struct Bandit : Module {
 
 	// float_4 * [4] give 16 polyphony channels, [2] is for cascading biquads
 	dsp::TBiquadFilter<float_4> filterLow[4][2], filterLowMid[4][2], filterHighMid[4][2], filterHigh[4][2];
-
+	float clipTimer = 0.f;
+	const float clipTime = 0.25f;
+	dsp::ClockDivider ledUpdateClock;
+	const int ledUpdateRate = 64;
 
 	Bandit() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(LOW_GAIN_PARAM, 0.f, 1.f, 0.f, "Low gain");
-		configParam(LOW_MID_GAIN_PARAM, 0.f, 1.f, 0.f, "Low mid gain");
-		configParam(HIGH_MID_GAIN_PARAM, 0.f, 1.f, 0.f, "High mid gain");
-		configParam(HIGH_GAIN_PARAM, 0.f, 1.f, 0.f, "High gain");
+		auto lowGainParam = configParam(LOW_GAIN_PARAM, 0.f, 1.f, 0.75f, "Low gain");
+		lowGainParam->description = "Lowpass <300 Hz";
+		auto lowMidGainParam = configParam(LOW_MID_GAIN_PARAM, 0.f, 1.f, 0.75f, "Low mid gain");
+		lowMidGainParam->description = "Bandpass ~750 Hz";
+		auto highMidGainParam = configParam(HIGH_MID_GAIN_PARAM, 0.f, 1.f, 0.75f, "High mid gain");
+		highMidGainParam->description = "Bandpass ~1.5 kHz";
+		auto highGainParam = configParam(HIGH_GAIN_PARAM, 0.f, 1.f, 0.75f, "High gain");
+		highGainParam->description = "Highpass >3 kHz";
 
+		// band inputs
 		configInput(LOW_INPUT, "Low");
 		configInput(LOW_MID_INPUT, "Low mid");
 		configInput(HIGH_MID_INPUT, "High mid");
 		configInput(HIGH_INPUT, "High");
+
+		// band send outputs
+		auto outLowSend = configOutput(LOW_OUTPUT, "Low");
+		outLowSend->description = "Normalled to Low band return";
+		auto outLowMidSend = configOutput(LOW_MID_OUTPUT, "Low mid");
+		outLowMidSend->description = "Normalled to Low Mid band return";
+		auto outHighMidSend = configOutput(HIGH_MID_OUTPUT, "High mid");
+		outHighMidSend->description = "Normalled to High Mid band return";
+		auto outHighSend = configOutput(HIGH_OUTPUT, "High");
+		outHighSend->description = "Normalled to High band return";
+
+		// band return inputs
 		configInput(LOW_RETURN_INPUT, "Low return");
 		configInput(LOW_MID_RETURN_INPUT, "Low mid return");
 		configInput(HIGH_MID_RETURN_INPUT, "High mid return");
 		configInput(HIGH_RETURN_INPUT, "High return");
+
+		// band gain CVs
 		configInput(LOW_CV_INPUT, "Low CV");
 		configInput(LOW_MID_CV_INPUT, "Low mid CV");
 		configInput(HIGH_MID_CV_INPUT, "High mid CV");
 		configInput(HIGH_CV_INPUT, "High CV");
 		configInput(ALL_INPUT, "All");
-		configInput(ALL_CV_INPUT, "All CV");
+		auto allCvInput = configInput(ALL_CV_INPUT, "All CV");
+		allCvInput->description = "Mix VCA, 10V to fully open";
 
-		configOutput(LOW_OUTPUT, "Low");
-		configOutput(LOW_MID_OUTPUT, "Low mid");
-		configOutput(HIGH_MID_OUTPUT, "High mid");
-		configOutput(HIGH_OUTPUT, "High");
+		// mix out
 		configOutput(MIX_OUTPUT, "Mix");
+
+		ledUpdateClock.setDivision(ledUpdateRate);
 	}
 
 	void onSampleRateChange() override {
@@ -125,7 +147,7 @@ struct Bandit : Module {
 		const bool allReturnsActiveAndMonophonic = inputs[LOW_RETURN_INPUT].isMonophonic() && inputs[LOW_MID_RETURN_INPUT].isMonophonic() &&
 		  inputs[HIGH_MID_RETURN_INPUT].isMonophonic() && inputs[HIGH_RETURN_INPUT].isMonophonic();
 
-		float_4 mixOutput;
+		float_4 mixOutput[4] = {};
 		for (int c = 0; c < maxPolyphony; c += 4) {
 
 			const float_4 inLow = inputs[LOW_INPUT].getPolyVoltageSimd<float_4>(c);
@@ -151,13 +173,13 @@ struct Bandit : Module {
 			outputs[HIGH_OUTPUT].setVoltageSimd<float_4>(outHigh, c);
 
 			// the fx return input is normalled to the fx send output
-			mixOutput  = inputs[LOW_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outLow, c);
-			mixOutput += inputs[LOW_MID_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outLowMid, c);
-			mixOutput += inputs[HIGH_MID_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outHighMid, c);
-			mixOutput += inputs[HIGH_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outHigh, c);
-			mixOutput = mixOutput * clamp(inputs[ALL_CV_INPUT].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f, 0.f, 1.f);
+			mixOutput[c / 4]  = inputs[LOW_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outLow * !outputs[LOW_OUTPUT].isConnected(), c);
+			mixOutput[c / 4] += inputs[LOW_MID_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outLowMid * !outputs[LOW_MID_OUTPUT].isConnected(), c);
+			mixOutput[c / 4] += inputs[HIGH_MID_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outHighMid * !outputs[HIGH_MID_OUTPUT].isConnected(), c);
+			mixOutput[c / 4] += inputs[HIGH_RETURN_INPUT].getNormalPolyVoltageSimd<float_4>(outHigh * !outputs[HIGH_OUTPUT].isConnected(), c);
+			mixOutput[c / 4] = mixOutput[c / 4] * clamp(inputs[ALL_CV_INPUT].getNormalPolyVoltageSimd<float_4>(10.f, c) / 10.f, 0.f, 1.f);
 
-			outputs[MIX_OUTPUT].setVoltageSimd<float_4>(mixOutput, c);
+			outputs[MIX_OUTPUT].setVoltageSimd<float_4>(mixOutput[c / 4], c);
 		}
 
 		outputs[LOW_OUTPUT].setChannels(maxPolyphony);
@@ -166,7 +188,7 @@ struct Bandit : Module {
 		outputs[HIGH_OUTPUT].setChannels(maxPolyphony);
 
 		if (allReturnsActiveAndMonophonic) {
-			// special case: if all return paths are connected and monophonic, then output mix should be monophonic			
+			// special case: if all return paths are connected and monophonic, then output mix should be monophonic
 			outputs[MIX_OUTPUT].setChannels(1);
 		}
 		else {
@@ -174,15 +196,57 @@ struct Bandit : Module {
 			outputs[MIX_OUTPUT].setChannels(maxPolyphony);
 		}
 
+		if (ledUpdateClock.process()) {
+			processLEDs(mixOutput, args.sampleTime * ledUpdateRate);
+		}
+	}
+
+	void processLEDs(const float_4* output, const float sampleTime) {
+
+		const int maxPolyphony = outputs[MIX_OUTPUT].getChannels();
+
 		if (maxPolyphony == 1) {
+			const float rmsOut = std::fabs(output[0][0]);
 			lights[MIX_LIGHT + 0].setBrightness(0.f);
-			lights[MIX_LIGHT + 1].setBrightnessSmooth(outputs[MIX_OUTPUT].getVoltageRMS(), args.sampleTime);
+			lights[MIX_LIGHT + 1].setBrightnessSmooth(rmsOut / 5.f, sampleTime);
 			lights[MIX_LIGHT + 2].setBrightness(0.f);
+
+			if (rmsOut > 10.f) {
+				clipTimer = clipTime;
+			}
+
+			const bool clip = clipTimer > 0.f;
+			if (clip) {
+				clipTimer -= sampleTime;
+			}
+
+			lights[MIX_CLIP_LIGHT + 0].setBrightnessSmooth(clip, sampleTime);
+			lights[MIX_CLIP_LIGHT + 1].setBrightness(0.f);
+			lights[MIX_CLIP_LIGHT + 2].setBrightness(0.f);
 		}
 		else {
+
+			float maxRmsOut = 0.f;
+			for (int c = 0; c < maxPolyphony; c++) {
+				maxRmsOut = std::max(maxRmsOut, std::fabs(output[c / 4][c % 4]));
+			}
+
 			lights[MIX_LIGHT + 0].setBrightness(0.f);
 			lights[MIX_LIGHT + 1].setBrightness(0.f);
-			lights[MIX_LIGHT + 2].setBrightnessSmooth(outputs[MIX_OUTPUT].getVoltageRMS(), args.sampleTime);
+			lights[MIX_LIGHT + 2].setBrightnessSmooth(maxRmsOut / 5.f, sampleTime);
+
+			// if any channel peaks above 10V, turn the clip light on for the next clipTime seconds
+			if (maxRmsOut > 10.f) {
+				clipTimer = clipTime;
+			}
+
+			const bool clip = clipTimer > 0.f;
+			if (clip) {
+				clipTimer -= sampleTime;
+			}
+			lights[MIX_CLIP_LIGHT + 0].setBrightnessSmooth(clip, sampleTime);
+			lights[MIX_CLIP_LIGHT + 1].setBrightness(0.f);
+			lights[MIX_CLIP_LIGHT + 2].setBrightness(0.f);
 		}
 	}
 };
