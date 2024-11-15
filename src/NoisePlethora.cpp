@@ -208,9 +208,9 @@ struct NoisePlethora : Module {
 		configSwitch(FILTER_TYPE_A_PARAM, 0.f, 2.f, 0.f, "Filter type", {"Lowpass", "Bandpass", "Highpass"});
 		configParam(PROGRAM_PARAM, 0, 1, 0.f, "Program/Bank selection");
 		configSwitch(FILTER_TYPE_B_PARAM, 0.f, 2.f, 0.f, "Filter type", {"Lowpass", "Bandpass", "Highpass"});
-		configParam(CUTOFF_CV_B_PARAM, 0.f, 1.f, 0.f, "Cutoff B");
+		configParam(CUTOFF_CV_B_PARAM, 0.f, 1.f, 0.f, "Cutoff CV B");
 		configParam(X_B_PARAM, 0.f, 1.f, 0.5f, "XB");
-		configParam(CUTOFF_B_PARAM, 0.f, 1.f, 1.f, "Cutoff CV B");
+		configParam(CUTOFF_B_PARAM, 0.f, 1.f, 1.f, "Cutoff B");
 		configParam(RES_B_PARAM, 0.f, 1.f, 0.f, "Resonance B");
 		configParam(Y_B_PARAM, 0.f, 1.f, 0.5f, "YB");
 		configSwitch(FILTER_TYPE_C_PARAM, 0.f, 2.f, 0.f, "Filter type", {"Lowpass", "Bandpass", "Highpass"});

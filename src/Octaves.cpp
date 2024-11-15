@@ -80,12 +80,12 @@ struct Octaves : Module {
 		configInput(VOCT2_INPUT, "V/Octave 2");
 		configInput(SYNC_INPUT, "Sync");
 		configInput(PWM_INPUT, "PWM");
-		configInput(GAIN_01F_INPUT, "Gain x1F CV");
-		configInput(GAIN_02F_INPUT, "Gain x1F CV");
-		configInput(GAIN_04F_INPUT, "Gain x1F CV");
-		configInput(GAIN_08F_INPUT, "Gain x1F CV");
-		configInput(GAIN_16F_INPUT, "Gain x1F CV");
-		configInput(GAIN_32F_INPUT, "Gain x1F CV");
+		configInput(GAIN_01F_INPUT, "Gain Fundamental CV");
+		configInput(GAIN_02F_INPUT, "Gain x2F CV");
+		configInput(GAIN_04F_INPUT, "Gain x4F CV");
+		configInput(GAIN_08F_INPUT, "Gain x8F CV");
+		configInput(GAIN_16F_INPUT, "Gain x16F CV");
+		configInput(GAIN_32F_INPUT, "Gain x32F CV");
 
 		configOutput(OUT_01F_OUTPUT, "x1F");
 		configOutput(OUT_02F_OUTPUT, "x2F");

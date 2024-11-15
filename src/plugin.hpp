@@ -32,6 +32,8 @@ extern Model* modelBurst;
 extern Model* modelMidiThing;
 extern Model* modelVoltio;
 extern Model* modelOctaves;
+extern Model* modelBypass;
+extern Model* modelBandit;
 
 struct Knurlie : SvgScrew {
 	Knurlie() {
@@ -237,6 +239,13 @@ struct Davies1900hWhiteKnobEndless : Davies1900hKnob {
 	Davies1900hWhiteKnobEndless() {
 		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/Davies1900hWhiteEndless.svg")));
 		bg->setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/Davies1900hWhiteEndless_bg.svg")));
+	}
+};
+
+template <typename TBase = WhiteLight>
+struct VeryLargeSimpleLight : TBase {
+	VeryLargeSimpleLight() {
+		this->box.size = mm2px(math::Vec(7, 7));
 	}
 };
 

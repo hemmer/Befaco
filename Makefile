@@ -6,3 +6,5 @@ SOURCES += $(wildcard src/noise-plethora/*/*.cpp)
 DISTRIBUTABLES += $(wildcard LICENSE*) res
 
 include $(RACK_DIR)/plugin.mk
+
+CXXFLAGS += -std=c++17

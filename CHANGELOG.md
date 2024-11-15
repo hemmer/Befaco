@@ -1,5 +1,17 @@
 # Change Log
 
+## v2.8.0
+  * Molten Bypass
+    * Initial release
+  * EvenVCO
+    * Complete re-write for better FM performance
+    * Hard sync added
+  * Octaves 
+    * Avoid allocation in the audio thread (thanks @danngreen)
+  * Noise Plethora
+    * Fix labels
+    * Avoid std::string allocations on audio thread (thanks @danngreen)
+  
 ## v2.7.1
   * Midi Thing 2
     * Remove -10 to 0 V configuration
