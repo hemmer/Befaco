@@ -68,7 +68,7 @@ public:
 		return program.setValue(p, getBankForIndex(getBank()).getSize());
 	}
 
-	const std::string getCurrentProgramName() {
+	std::string_view getCurrentProgramName() {
 		return getBankForIndex(getBank()).getProgramName(getProgram());
 	}
 

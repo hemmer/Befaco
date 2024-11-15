@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "ChowDSP.hpp"
+#include "util/math.hh"
 
 using simd::float_4;
 
@@ -185,7 +186,8 @@ struct PonyVCO : Module {
 				tzfmVoltage = blockTZFMDCFilter[c / 4].highpass();
 			}
 
-			const float_4 pitch = inputs[VOCT_INPUT].getPolyVoltageSimd<float_4>(c) + params[FREQ_PARAM].getValue() * range[rangeIndex];
+			const float_4 pitchcv = simd::clamp(inputs[VOCT_INPUT].getPolyVoltageSimd<float_4>(c), -12.f, 12.f);
+			const float_4 pitch = pitchcv + params[FREQ_PARAM].getValue() * range[rangeIndex];
 			const float_4 freq = baseFreq * simd::pow(2.f, pitch);
 			const float_4 deltaBasePhase = simd::clamp(freq * args.sampleTime / oversamplingRatio, -0.5f, 0.5f);
 			// floating point arithmetic doesn't work well at low frequencies, specifically because the finite difference denominator

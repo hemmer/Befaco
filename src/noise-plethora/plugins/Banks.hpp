@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <memory>
 #include <array>
 
@@ -30,7 +31,7 @@ struct Bank {
 	     const BankElem& p7 = defaultElem, const BankElem& p8 = defaultElem,
 	     const BankElem& p9 = defaultElem, const BankElem& p10 = defaultElem);
 
-	const std::string getProgramName(int i);
+	std::string_view getProgramName(int i);
 	float getProgramGain(int i);
 
 	int getSize();
