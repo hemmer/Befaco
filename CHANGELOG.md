@@ -1,5 +1,19 @@
 # Change Log
 
+## v2.9.0
+  * MuDi, Slew, Atte, Mixer2, AxBC initial releases
+  * Fix missing port information (multiple modules)
+  * Fix StereoStrip issue at very low sample rates
+
+## v2.8.2
+  * EvenVCO
+    * Upsample Hard Sync and FM inputs
+    * Fix bug when DC option was disabled
+
+## v2.8.1
+  * Noise Plethora
+    * Fix bug where program choice is wrongly copied between top and bottom sections
+
 ## v2.8.0
   * Molten Bypass
     * Initial release
