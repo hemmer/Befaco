@@ -1,5 +1,16 @@
 # Change Log
 
+## v2.10.0
+  * Iroi
+    * Initial release
+
+## v2.9.1
+  * Slew
+    * Fix Slew rise/fall outputs
+    * Add missing label
+  * Misc
+    * Add some missing modulargrid links
+
 ## v2.9.0
   * MuDi, Slew, Atte, Mixer2, AxBC initial releases
   * Fix missing port information (multiple modules)
