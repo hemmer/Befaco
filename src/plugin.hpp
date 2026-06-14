@@ -53,22 +53,25 @@ struct BefacoTinyKnobWhite : BefacoTinyKnob {
 
 struct BefacoTinyKnobRed : BefacoTinyKnob {
 	BefacoTinyKnobRed() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoTinyPointWhite.svg")));
-		bg->setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoTinyKnobRed_bg.svg")));
+		minAngle = -0.8 * M_PI;
+		maxAngle = 0.8 * M_PI;
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoTinyKnobRed.svg")));
 	}
 };
 
 struct BefacoTinyKnobGreen : BefacoTinyKnob {
 	BefacoTinyKnobGreen() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoTinyPointWhite.svg")));
-		bg->setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoTinyKnobGreen_bg.svg")));
+		minAngle = -0.8 * M_PI;
+		maxAngle = 0.8 * M_PI;
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoTinyKnobGreen.svg")));
 	}
 };
 
-struct BefacoTinyKnobBlue : BefacoTinyKnob {
+struct BefacoTinyKnobBlue : app::SvgKnob {
 	BefacoTinyKnobBlue() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoTinyPointWhite.svg")));
-		bg->setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoTinyKnobBlue_bg.svg")));
+		minAngle = -0.8 * M_PI;
+		maxAngle = 0.8 * M_PI;
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoTinyKnobBlue.svg")));
 	}
 };
 
@@ -110,6 +113,13 @@ struct Davies1900hDarkGreyKnob : Davies1900hKnob {
 	Davies1900hDarkGreyKnob() {
 		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/Davies1900hDarkGrey.svg")));
 		bg->setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/Davies1900hDarkGrey_bg.svg")));
+	}
+};
+
+struct Davies1900hRedKnobAlt : Davies1900hKnob {
+	Davies1900hRedKnobAlt() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/Davies1900hRed.svg")));
+		bg->setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/Davies1900hRed_bg.svg")));
 	}
 };
 

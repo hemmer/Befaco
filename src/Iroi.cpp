@@ -597,6 +597,11 @@ struct IroiVCV : Module {
         }
     }
 
+    void clearMappingsForAllModes() {
+        clearCvMappings();
+        clearModMappings();
+    }
+
     void triggerClearFlash() { clearFlashTime = 0.12f; }
 
     void processButtons() {
@@ -624,7 +629,11 @@ struct IroiVCV : Module {
 
         auto clearButtonEvent = clearButtonTrigger.processEvent(params[CLEAR_PARAM].getValue());
         if (clearButtonEvent == dsp::BooleanTrigger::Event::TRIGGERED && params[SHIFT_PARAM].getValue() > 0.5f) {
+            #ifdef METAMODULE 
+            clearMappingsForAllModes();
+            #else
             clearMappingsForCurrentMode();
+            #endif
             triggerClearFlash();
         }
 
@@ -839,13 +848,15 @@ struct IroiVCV : Module {
 struct BefacoButtonIroi : app::SvgSwitch {
     BefacoButtonIroi() {
         momentary = true;
-        addFrame(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoButton.svg")));
+        addFrame(APP->window->loadSvg(asset::plugin(pluginInstance, "res/components/BefacoButton_0.svg")));
+        addFrame(APP->window->loadSvg(asset::plugin(pluginInstance, "res/components/BefacoButton_1.svg")));
     }
 };
 struct BefacoButtonIroiToggle : app::SvgSwitch {
     BefacoButtonIroiToggle() {
-        momentary = false;
-        addFrame(Svg::load(asset::plugin(pluginInstance, "res/components/BefacoButton.svg")));
+        momentary = false;        
+        addFrame(APP->window->loadSvg(asset::plugin(pluginInstance, "res/components/BefacoButton_0.svg")));
+        addFrame(APP->window->loadSvg(asset::plugin(pluginInstance, "res/components/BefacoButton_1.svg")));
     }
 };
 template <typename TBase> struct VCVBezelLightBig : TBase {
@@ -1074,17 +1085,20 @@ struct IroiWidget : ModuleWidget {
         addParam(createParam<BefacoSlidePotSmall>(mm2px(Vec(69.189, 87.842)), module, IroiVCV::ECHO_DRY_WET_PARAM));
         addParam(createParam<BefacoSlidePotSmall>(mm2px(Vec(82.616, 87.842)), module, IroiVCV::AMB_DRY_WET_PARAM));
         addParam(createParam<CKSSNarrow3>(mm2px(Vec(43.656, 90.752)), module, IroiVCV::MAP_MODE_PARAM));
+        
+        #ifndef METAMODULE
         addParam(createLightParamCentered<BefacoRedLightToggleButton>(mm2px(Vec(29.009, 94.492)), module, IroiVCV::SHIFT_PARAM,
                                                                       IroiVCV::SHIFT_BUTTON_LED));
+        addParam(createLightParamCentered<BefacoLightButton>(mm2px(Vec(45.65, 110.464)), module, IroiVCV::MAP_PARAM,
+                                                                      IroiVCV::MAP_BUTTON_LED));
+        #endif
         addParam(createLightParamCentered<BefacoRedLightButton>(mm2px(Vec(29.009, 110.464)), module, IroiVCV::RANDOM_PARAM,
                                                                 IroiVCV::RANDOM_BUTTON_LED));
-        mapButtonWidget = createLightParamCentered<BefacoLightButton>(mm2px(Vec(45.65, 110.464)), module, IroiVCV::MAP_PARAM,
-                                                                      IroiVCV::MAP_BUTTON_LED);
-        addParam(mapButtonWidget);
-        clearButtonWidget = createLightParamCentered<BefacoLightButton>(mm2px(Vec(45.65, 110.464)), module,
-                                                                        IroiVCV::CLEAR_PARAM, IroiVCV::CLEAR_BUTTON_LED);
-        clearButtonWidget->hide();
-        addParam(clearButtonWidget);
+        
+        
+        addParam(createLightParamCentered<BefacoLightButton>(mm2px(Vec(45.65, 110.464)), module,
+                                                                        IroiVCV::CLEAR_PARAM, IroiVCV::CLEAR_BUTTON_LED));     
+        
 
         // alternate knobs (hidden by default), mapped like Oneiroi
         modulationTypeWidget =
@@ -1093,15 +1107,15 @@ struct IroiWidget : ModuleWidget {
         addParam(modulationTypeWidget);
         filterModeParamWidget =
             createParamCentered<Davies1900hRedKnob>(mm2px(Vec(29.009, 38.369)), module, IroiVCV::FILTER_MODE_PARAM);
-        filterModeParamWidget->hide();
+        //filterModeParamWidget->hide();
         addParam(filterModeParamWidget);
         filterPositionWidget =
             createParamCentered<BefacoTinyKnobRed>(mm2px(Vec(45.648, 49.153)), module, IroiVCV::FILTER_POSITION_PARAM);
-        filterPositionWidget->hide();
+        //filterPositionWidget->hide();
         addParam(filterPositionWidget);
         dissonanceWidget =
-            createParamCentered<Davies1900hRedKnob>(mm2px(Vec(62.726, 38.359)), module, IroiVCV::RESONATOR_DISSONANCE_PARAM);
-        dissonanceWidget->hide();
+            createParamCentered<Davies1900hRedKnobAlt>(mm2px(Vec(62.726, 38.359)), module, IroiVCV::RESONATOR_DISSONANCE_PARAM);
+        //dissonanceWidget->hide();
         addParam(dissonanceWidget);
         echoFilterWidget =
             createParamCentered<Davies1900hRedKnob>(mm2px(Vec(45.65, 70.793)), module, IroiVCV::ECHO_FILTER_PARAM);
@@ -1332,8 +1346,10 @@ struct IroiWidget : ModuleWidget {
         ambienceSpacetimeRndWidget->visible = showRnd;
         ambienceDecayRndWidget->visible = showRnd;
 
+        #ifndef METAMODULE
         mapButtonWidget->visible = !showAlt;
         clearButtonWidget->visible = showAlt;
+        #endif
 
         if (iroi && iroi->consumePendingRandomizeAction()) {
             if (iroi->useNativeRackRandomisation) {

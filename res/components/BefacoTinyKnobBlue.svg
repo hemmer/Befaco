@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns="http://www.w3.org/2000/svg"
+   width="25.51182"
+   height="25.51204"
+   viewBox="0 0 25.51182 25.51204"
+   version="1.1">
+  <defs>
+    <linearGradient id="outer" x1="12.75591" y1="0" x2="12.75591" y2="25.51204" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#828181"/>
+      <stop offset="1" stop-color="#575757"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="12.75591" y1="0.38863" x2="12.75591" y2="25.12341" gradientUnits="userSpaceOnUse">
+      <stop offset="0.00559" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#7a7a7a"/>
+    </linearGradient>
+    <linearGradient id="face" x1="12.75591" y1="3.25316" x2="12.75591" y2="22.26197" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6652ff"/>
+      <stop offset="1" stop-color="#0b0061"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="12.75591" y1="3.9" x2="12.75591" y2="12.1" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="12.75591" cy="12.75602" r="12.75591" fill="url(#outer)"/>
+  <circle cx="12.75591" cy="12.75602" r="12.36893" fill="url(#rim)"/>
+  <circle cx="12.75591" cy="12.75602" r="11.63479" fill="#e0e0e0"/>
+  <circle cx="12.75591" cy="12.75602" r="9.95" fill="url(#face)"/>
+  <ellipse cx="12.75591" cy="7.7" rx="7.0" ry="4.8" fill="url(#shine)"/>
+  <circle cx="12.71435" cy="5.68004" r="1.36886" fill="#f2f2f2" fill-opacity="0.95"/>
+</svg>
