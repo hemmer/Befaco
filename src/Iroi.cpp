@@ -215,29 +215,10 @@ struct IroiVCV : Module {
         }
     };
 
-    struct FilterCutoffTypeParamQuantity : ParamQuantity {
-
-        const float MIN_FREQ_LOG = log(10.f);
-        const float MAX_FREQ_LOG = log(22000.f);
-
-        std::string getDisplayValueString() override {
-            // convert to Hz
-            const float valueMapped = MIN_FREQ_LOG + getValue() * (MAX_FREQ_LOG - MIN_FREQ_LOG);
-            const float freqHz = expf(valueMapped);
-            return string::f("%.1f", freqHz);
-        }
-
-        void setDisplayValueString(const std::string s) override {
-            float sv = std::atof(s.c_str());
-            setValue((log(sv) - MIN_FREQ_LOG) / (MAX_FREQ_LOG - MIN_FREQ_LOG));
-        }
-    };
-
     IroiVCV() {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
-        auto filterCutoff =
-            configParam<FilterCutoffTypeParamQuantity>(FILTER_CUTOFF_PARAM, 0.f, 1.f, 1.f, "Filter cutoff", "Hz");
+        auto filterCutoff = configParam(FILTER_CUTOFF_PARAM, 0.f, 1.f, 1.f, "Filter cutoff", "Hz", 2200.f, 10.f);
         filterCutoff->description = "Main cutoff frequency for the filter section.";
         configParam(RESONATOR_TUNE_PARAM, 0.f, 1.f, 0.5f, "Resonator tune");
         configParam(MOD_LEVEL_PARAM, 0.f, 1.f, 0.f, "Modulation level", "%", 0.f, 100.f);
@@ -628,7 +609,7 @@ struct IroiVCV : Module {
         }
 
         auto clearButtonEvent = clearButtonTrigger.processEvent(params[CLEAR_PARAM].getValue());
-        if (clearButtonEvent == dsp::BooleanTrigger::Event::TRIGGERED && params[SHIFT_PARAM].getValue() > 0.5f) {
+        if (clearButtonEvent == dsp::BooleanTrigger::Event::TRIGGERED) {
             #ifdef METAMODULE 
             clearMappingsForAllModes();
             #else

@@ -51,7 +51,7 @@ struct BefacoTinyKnobWhite : BefacoTinyKnob {
 	BefacoTinyKnobWhite() {}
 };
 
-struct BefacoTinyKnobRed : BefacoTinyKnob {
+struct BefacoTinyKnobRed : app::SvgKnob {
 	BefacoTinyKnobRed() {
 		minAngle = -0.8 * M_PI;
 		maxAngle = 0.8 * M_PI;
@@ -59,7 +59,7 @@ struct BefacoTinyKnobRed : BefacoTinyKnob {
 	}
 };
 
-struct BefacoTinyKnobGreen : BefacoTinyKnob {
+struct BefacoTinyKnobGreen : app::SvgKnob {
 	BefacoTinyKnobGreen() {
 		minAngle = -0.8 * M_PI;
 		maxAngle = 0.8 * M_PI;
