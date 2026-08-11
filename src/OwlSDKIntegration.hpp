@@ -6,6 +6,7 @@
 #include "FastPowTable.h"
 #include "MemoryBuffer.hpp"
 #include "PatchProcessor.h"
+#include "ProgramVector.h"
 
 static float parameter_values[40] = {};
 static uint32_t button_values = 0;
@@ -13,8 +14,7 @@ int errorcode = 0;
 
 #define BLOCKSIZE 32
 
-struct ProgramVector {};
-ProgramVector programVector;
+ProgramVector programVector{};
 extern int errorcode;
 
 #if defined(VCV)

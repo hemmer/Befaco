@@ -158,7 +158,7 @@ struct Random8 : Module {
             steps->description = "Length of the loop when in LOOP Mode.";
         }
         for (int i = 0; i < NUM_PAGES; i++) {
-            configButton(pageButtonParams[i], string::f("Ch. %d", i + 1));
+            configButton(pageButtonParams[i], string::f("Button Ch. %d", i + 1));
         }
 
         for (int i = 0; i < NUM_CHANNELS; i++) {
@@ -702,7 +702,11 @@ template <typename TBase> struct VCVBezelLightSmall : TBase {
     }
 };
 
-typedef LightButton<VCVBezelSmallLight, VCVBezelLightSmall<RedGreenBlueLight>> Random8Button;
+#ifdef METAMODULE
+using Random8Button = VCVButton;
+#else
+using Random8Button = LightButton<VCVBezelSmallLight, VCVBezelLightSmall<RedGreenBlueLight>>;
+#endif
 
 struct Random8ChannelButton : Random8Button {
     int channel = -1;
@@ -752,11 +756,23 @@ struct Random8Widget : ModuleWidget {
             addInput(createInputCentered<BefacoInputPort>(mm2px(Vec(15.0f, inputY[i])), module, Random8::TRIG_INPUT + i));
             addOutput(createOutputCentered<BefacoOutputPort>(mm2px(Vec(5.004f, inputY[i])), module, Random8::OUT_OUTPUT + i));
             addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(36.0f, lightY[i])), module, Random8::CH_LIGHT + i));
+            const Vec buttonPosition = mm2px(Vec(35.966f, inputY[i] + 3.423f));
+#ifdef METAMODULE
+            auto *button =
+                createParamCentered<Random8ChannelButton>(buttonPosition, module, Random8::PRESET_PARAM + i);
+#else
             auto *button = createLightParamCentered<Random8ChannelButton>(
-                mm2px(Vec(35.966f, inputY[i] + 3.423f)), module, Random8::PRESET_PARAM + i, Random8::PRESET_LIGHT + i * 3);
+                buttonPosition, module, Random8::PRESET_PARAM + i, Random8::PRESET_LIGHT + i * 3);
+#endif
             button->channel = i;
             channelButtons[i] = button;
             addParam(button);
+#ifdef METAMODULE
+            // MetaModule does not export the RGB light nested in Rack's generic
+            // LightButton, so render it as a separate standard RGB light.
+            addChild(createLightCentered<MediumLight<RedGreenBlueLight>>(
+                buttonPosition, module, Random8::PRESET_LIGHT + i * 3));
+#endif
         }
         setPage(Random8::PAGE_PRESET);
     }

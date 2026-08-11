@@ -3,6 +3,8 @@
 #include "noise-plethora/plugins/ProgramSelector.hpp"
 #include "metamodule/VCVTextDisplay.hpp"
 
+namespace {
+
 enum FilterMode {
 	LOWPASS,
 	HIGHPASS,
@@ -87,6 +89,8 @@ public:
 private:
 	StateVariableFilter2ndOrder stage1, stage2;
 };
+
+} // namespace
 
 
 struct NoisePlethora : Module {
