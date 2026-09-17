@@ -109,6 +109,19 @@ struct Octaves : Module {
 		}
 	}
 
+	void onReset() override {
+		for (int i = 0; i < 4; ++i) {
+			phase[i] = 0.f;
+			syncTrigger[i].reset();
+		}
+		onSampleRateChange();
+		for (int output = 0; output < NUM_OUTPUTS; ++output) {
+			for (int i = 0; i < 4; ++i) {
+				blockDCFilter[output][i].reset();
+			}
+		}
+	}
+
 
 	void process(const ProcessArgs& args) override {
 
@@ -216,6 +229,7 @@ struct Octaves : Module {
 		}
 		activePolyphonyEngines = std::max({activePolyphonyEngines, inputs[VOCT1_INPUT].getChannels(), inputs[VOCT2_INPUT].getChannels()});
 		activePolyphonyEngines = std::max(activePolyphonyEngines, inputs[PWM_INPUT].getChannels());
+		activePolyphonyEngines = std::max(activePolyphonyEngines, inputs[SYNC_INPUT].getChannels());
 
 		return activePolyphonyEngines;
 	}
@@ -254,7 +268,7 @@ struct Octaves : Module {
 
 		json_t* oversamplingIndexJ = json_object_get(rootJ, "oversamplingIndex");
 		if (oversamplingIndexJ) {
-			oversamplingIndex = json_integer_value(oversamplingIndexJ);
+			oversamplingIndex = clamp(static_cast<int>(json_integer_value(oversamplingIndexJ)), 0, 4);
 			onSampleRateChange();
 		}
 
