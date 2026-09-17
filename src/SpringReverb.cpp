@@ -1,15 +1,17 @@
-#include "vcv_ports/glue/Befaco/Befaco_res_SpringReverbIR_f32.h"
+#include "vcv_ports/glue/Befaco/Befaco_res_SpringReverbIR_i16.h"
 
 #include "plugin.hpp"
 #include <pffft.h>
 
-static std::vector<uint8_t> ir;
+static std::vector<float> ir;
 
 static void initIR() {
 	if (!ir.empty())
 		return;
 
-	ir.assign(std::begin(Befaco_res_SpringReverbIR_f32), std::end(Befaco_res_SpringReverbIR_f32));
+	ir.reserve(std::size(Befaco_res_SpringReverbIR_i16));
+	for (auto s : Befaco_res_SpringReverbIR_i16)
+		ir.push_back(s * Befaco_res_SpringReverbIR_i16_scale);
 }
 
 static const size_t BLOCK_SIZE = 1024;
@@ -76,9 +78,7 @@ struct SpringReverb : Module {
 
 		convolver = new dsp::RealTimeConvolver(BLOCK_SIZE);
 
-		const float* kernel = (const float*) ir.data();
-		size_t kernelLen = ir.size() / sizeof(float);
-		convolver->setKernel(kernel, kernelLen);
+		convolver->setKernel(ir.data(), ir.size());
 
 		vuFilter.mode = dsp::VuMeter2::PEAK;
 		lightFilter.mode = dsp::VuMeter2::PEAK;
