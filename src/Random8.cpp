@@ -278,11 +278,25 @@ struct Random8 : Module {
     }
 
     void syncCoreParams() {
+        // Rebuilding a style regenerates its random sequence and can invoke
+        // expensive standard-library distributions. Keep that work bounded on
+        // the real-time thread when several style controls move together. The
+        // deferred style remains visible as a parameter change and is applied
+        // on the next control tick; all other parameter changes are immediate.
+        bool styleChangeApplied = false;
         for (int channel = 0; channel < NUM_CHANNELS; channel++) {
             const Random8ChannelParams channelParams = readChannelParams(channel);
             if (channelParamsDirty[channel] || channelParamsChanged(channelParams, lastChannelParams[channel])) {
-                core.setChannelParams(channel, channelParams);
-                lastChannelParams[channel] = channelParams;
+                Random8ChannelParams appliedParams = channelParams;
+                const bool styleChanged = channelParams.style != lastChannelParams[channel].style;
+                if (styleChanged && styleChangeApplied) {
+                    appliedParams.style = lastChannelParams[channel].style;
+                } else if (styleChanged) {
+                    styleChangeApplied = true;
+                }
+
+                core.setChannelParams(channel, appliedParams);
+                lastChannelParams[channel] = appliedParams;
                 channelParamsDirty[channel] = false;
             }
         }
